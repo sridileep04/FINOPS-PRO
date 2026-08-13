@@ -1,0 +1,18 @@
+# Ignore sensitive environment files
+.env
+
+# Python cache and compilation files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Version control
+.git
+.gitignore
+
+# Documentation and notes
+*.md

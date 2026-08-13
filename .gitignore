@@ -1,0 +1,85 @@
+# ==============================================================================
+# 1. Environment & Secrets (Never commit production credentials)
+# ==============================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# ==============================================================================
+# 2. FastAPI / Python Backend
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+poetry.lock
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Test/coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ==============================================================================
+# 3. ReactJS Frontend
+# ==============================================================================
+# Dependencies
+node_modules/
+/jspm_packages/
+
+# Production builds
+dist/
+build/
+out/
+
+# Frontend testing & logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+.stylelintcache
+.turbo/
+
+# Vite/Next.js/CRA local files
+.local
+.tsbuildinfo
+
+# ==============================================================================
+# 4. Databases & Storage (If running local DB instances)
+# ==============================================================================
+*.db
+*.sqlite3
+postgres-data/
+mongo-data/
+.elastic/
+
+# ==============================================================================
+# 5. Editor, System & IDE Artifacts
+# ==============================================================================
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+ehthumbs.db
+Thumbs.db
