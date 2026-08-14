@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-brand-base: var(--brand-base);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-surface-alt: var(--brand-surface-alt);
+  --color-brand-border-strong: var(--brand-border-strong);
+  --color-brand-text: var(--brand-text);
+  --color-brand-content: var(--brand-content);
+}
+
+:root {
+  /* Default (Dark Mode) */
+  --brand-base: #050505;
+  --brand-surface: #0d0d0d;
+  --brand-surface-alt: #0a0a0a;
+  --brand-border-strong: #1a1a1a;
+  --brand-text: #e0e0e0;
+  --brand-content: #ffffff;
+}
+
+:root[data-theme="light"] {
+  --brand-base: #f8fafc;
+  --brand-surface: #ffffff;
+  --brand-surface-alt: #f1f5f9;
+  --brand-border-strong: #e2e8f0;
+  --brand-text: #0f172a;
+  --brand-content: #000000;
+}
+
+:root[data-theme="royal-purple"] {
+  --brand-base: #130324;
+  --brand-surface: #220a40;
+  --brand-surface-alt: #1a0636;
+  --brand-border-strong: #3b0764;
+  --brand-text: #f3e8ff;
+  --brand-content: #ffffff;
+}
+
+:root[data-theme="royal-blue"] {
+  --brand-base: #020617;
+  --brand-surface: #0f172a;
+  --brand-surface-alt: #0b1120;
+  --brand-border-strong: #1e293b;
+  --brand-text: #e0e7ff;
+  --brand-content: #ffffff;
+}
+
+:root[data-theme="royal-gold"] {
+  --brand-base: #1c1917;
+  --brand-surface: #292524;
+  --brand-surface-alt: #221f1e;
+  --brand-border-strong: #44403c;
+  --brand-text: #fef08a;
+  --brand-content: #ffffff;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.3s;
+}

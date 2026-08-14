@@ -56,6 +56,30 @@ pnpm-debug.log*
 # Vite/Next.js/CRA local files
 .local
 .tsbuildinfo
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # ==============================================================================
 # 4. Databases & Storage (If running local DB instances)
