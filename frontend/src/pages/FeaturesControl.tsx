@@ -58,7 +58,7 @@ export default function FeaturesControl() {
         }
 
         try {
-            const res = await fetch(`/api/features/${feature.id}/toggle`, {
+            const res = await fetch(`/api/v1/features/${feature.id}/toggle`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -96,7 +96,7 @@ export default function FeaturesControl() {
         }
 
         try {
-            const res = await fetch(`/api/features/${selectedFeature.id}/config`, {
+            const res = await fetch(`/api/v1/features/${selectedFeature.id}/config`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,

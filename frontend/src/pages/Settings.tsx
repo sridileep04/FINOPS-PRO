@@ -267,7 +267,7 @@ export default function Settings() {
         e.preventDefault();
         setLoading(true);
         const isEdit = !!editingBudget?.id;
-        const url = isEdit ? `/api/settings/budgets/${editingBudget.id}` : '/api/settings/budgets';
+        const url = isEdit ? `/api/v1/settings/budgets/${editingBudget.id}` : '/api/v1/settings/budgets';
         const method = isEdit ? 'PUT' : 'POST';
 
         try {
@@ -296,7 +296,7 @@ export default function Settings() {
     const deleteBudget = async (id: number) => {
         if (!window.confirm('Are you sure you want to delete this budget policy?')) return;
         try {
-            const res = await fetch(`/api/settings/budgets/${id}`, {
+            const res = await fetch(`/api/v1/settings/budgets/${id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -365,7 +365,7 @@ export default function Settings() {
         setLoading(true);
         try {
             const method = editingAlert ? 'PUT' : 'POST';
-            const url = editingAlert ? `/api/settings/alerts/${editingAlert.id}` : '/api/settings/alerts';
+            const url = editingAlert ? `/api/v1/settings/alerts/${editingAlert.id}` : '/api/v1/settings/alerts';
 
             const res = await fetch(url, {
                 method,
@@ -392,7 +392,7 @@ export default function Settings() {
     const deleteAlert = async (id: number) => {
         if (!window.confirm('Are you sure you want to delete this alert rule?')) return;
         try {
-            const res = await fetch(`/api/settings/alerts/${id}`, {
+            const res = await fetch(`/api/v1/settings/alerts/${id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -467,7 +467,7 @@ export default function Settings() {
 
     const updateMemberRole = async (memberId: number, newRole: string) => {
         try {
-            const res = await fetch(`/api/settings/team/${memberId}/role`, {
+            const res = await fetch(`/api/v1/settings/team/${memberId}/role`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -487,7 +487,7 @@ export default function Settings() {
     const deleteTeamMember = async (id: number) => {
         if (!window.confirm('Are you sure you want to revoke this user\'s access to the workspace?')) return;
         try {
-            const res = await fetch(`/api/settings/team/${id}`, {
+            const res = await fetch(`/api/v1/settings/team/${id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -1735,7 +1735,7 @@ export default function Settings() {
                                                 Unix / Kubernetes Provisioning Script
                                             </label>
                                             <button
-                                                onClick={() => handleCopy(`curl -sSfL http://127.0.0.1:8001/api/agent/install | sh -s -- --token="${token}" --url="http://127.0.0.1:8001"`)}
+                                                onClick={() => handleCopy(`curl -sSfL http://127.0.0.1:8001/api/v1/agent/install | sh -s -- --token="${token}" --url="http://127.0.0.1:8001"`)}
                                                 className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
                                             >
                                                 {copiedText ? (
@@ -1753,7 +1753,7 @@ export default function Settings() {
                                         </div>
 
                                         <div className="p-3.5 rounded-lg bg-black font-mono text-[10px] text-[#a9b1d6] border border-brand-content/5 overflow-x-auto select-all leading-normal">
-                                            {`curl -sSfL http://127.0.0.1:8001/api/agent/install | sh -s -- --token="${token?.substring(0, 30)}..." --url="http://127.0.0.1:8001"`}
+                                            {`curl -sSfL http://127.0.0.1:8001/api/v1/agent/install | sh -s -- --token="${token?.substring(0, 30)}..." --url="http://127.0.0.1:8001"`}
                                         </div>
                                     </div>
 
@@ -1769,7 +1769,7 @@ export default function Settings() {
                                             </div>
                                         </div>
                                         <a
-                                            href="/api/agent/install"
+                                            href="/api/v1/agent/install"
                                             download="install.sh"
                                             className="text-xs flex items-center justify-center gap-1.5 h-9 px-4 rounded bg-slate-800 hover:bg-slate-700 text-brand-content border border-brand-content/10 transition-all font-semibold"
                                         >

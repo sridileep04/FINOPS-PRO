@@ -78,22 +78,16 @@ def _serialize(row: Integration) -> dict:
 
 
 async def _get_or_404(db: AsyncSession, user: User, integration_id: str) -> Integration:
-    # Use .scalar_one_or_none() with raise_for_second_row=False to gracefully
-    # handle duplicate integration rows (should not happen with the unique
-    # constraint, but defensively returns the first match if duplicates exist).
     stmt = select(Integration).where(
         Integration.customer_id == user.customer_id,
-        Integration.integration_key == integration_id
+        Integration.integration_key == integration_id,
     )
     result = await db.execute(stmt)
-    row = result.scalar_one_or_none()
-    # row = result.scalar_one_or_none(raise_for_second_row=False)
+    row = result.scalars().first()
     if row is None:
-        # In case connect/test is called before the Integrations page has
-        # ever fetched (and thus seeded) the list.
         await _seed_if_empty(db, user.customer_id)
         result = await db.execute(stmt)
-        row = result.scalar_one_or_none(raise_for_second_row=False)
+        row = result.scalars().first()
     if row is None:
         raise HTTPException(status_code=404, detail="Integration not found")
     return row

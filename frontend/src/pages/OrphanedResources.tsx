@@ -80,7 +80,7 @@ export default function OrphanedResources() {
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure you want to permanently delete this orphaned resource?')) return;
         try {
-            const res = await fetch(`/api/orphaned-resources/${id}`, {
+            const res = await fetch(`/api/v1/orphaned-resources/${id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -111,7 +111,7 @@ export default function OrphanedResources() {
         setTerminalLogs(initialLogs);
 
         try {
-            const response = await fetch(`/api/orphaned-resources/${res.id}/remediate`, {
+            const response = await fetch(`/api/v1/orphaned-resources/${res.id}/remediate`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,

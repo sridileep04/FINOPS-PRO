@@ -87,7 +87,7 @@ export default function Optimizations() {
             const sumData = await sumRes.json();
 
             // Load optimizations
-            const optRes = await fetch(`/api/optimizations?status=all`, { headers });
+            const optRes = await fetch(`/api/v1/optimizations?status=all`, { headers });
             const optData = await optRes.json();
 
             if (optRes.ok && sumRes.ok) {
@@ -121,7 +121,7 @@ export default function Optimizations() {
     const handleApplyStateChange = async (optId: number, action: 'apply' | 'dismiss' | 'restore') => {
         try {
             const token = localStorage.getItem('token')?.replace(/^"|"$/g, '').trim();
-            const response = await fetch(`/api/optimizations/${optId}/${action}`, {
+            const response = await fetch(`/api/v1/optimizations/${optId}/${action}`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -203,7 +203,7 @@ export default function Optimizations() {
 
             // Save in backend
             const token = localStorage.getItem('token')?.replace(/^"|"$/g, '').trim();
-            const res = await fetch(`/api/optimizations/${selectedOpt.id}/apply`, {
+            const res = await fetch(`/api/v1/optimizations/${selectedOpt.id}/apply`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` }
             });

@@ -286,8 +286,8 @@ export default function Integrations() {
             case 'aws_keys': return [
                 { name: 'accessKeyId', label: 'Access Key ID', type: 'text', placeholder: 'AKIA...' },
                 { name: 'secretAccessKey', label: 'Secret Access Key', type: 'password', placeholder: '...' },
-                { name: 'accountId', label: 'AWS Account ID (Optional)', type: 'text', placeholder: '236782813401' },
-                { name: 'userArn', label: 'IAM User ARN (Optional)', type: 'text', placeholder: 'arn:aws:iam::236782813401:user/dk' }
+                { name: 'accountId', label: 'AWS Account ID (Optional)', type: 'text', placeholder: '23678281XXXX' },
+                { name: 'userArn', label: 'IAM User ARN (Optional)', type: 'text', placeholder: 'arn:aws:iam::23678281XXXX:user/dk' }
             ];
             case 'aws_cur': return [
                 { name: 'bucketName', label: 'S3 Bucket Name', type: 'text', placeholder: 'my-billing-reports' },

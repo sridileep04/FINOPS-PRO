@@ -119,7 +119,7 @@ export default function AnomalyDetectionWidget({ hasResources = true, refreshTri
         if (!token) return;
         try {
             setAcknowledgingIds(prev => [...prev, id]);
-            const res = await fetch(`/api/dashboard/anomalies/${id}/acknowledge`, {
+            const res = await fetch(`/api/v1/dashboard/anomalies/${id}/acknowledge`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`

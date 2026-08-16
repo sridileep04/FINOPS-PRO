@@ -45,7 +45,8 @@ export default function IaCDrift() {
 
     const handleResolve = async (id: string, action: string) => {
         try {
-            const res = await fetch(`/api/terraform/drifts/${id}/resolve?action=${action}`, {
+            const res = await fetch(`/api/v1/
+                terraform/drifts/${id}/resolve?action=${action}`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });

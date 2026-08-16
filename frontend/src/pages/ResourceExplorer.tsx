@@ -80,14 +80,15 @@ export default function ResourceExplorer() {
         if (filterProvider !== 'all') params.append('provider', filterProvider);
         params.append('date', selectedDate);
 
-        fetch(`/api/resources?${params.toString()}`, {
+        fetch(`/api/v1/resources?${params.toString()}`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
         })
             .then(res => res.json())
             .then(data => {
-                setResources(data);
+                // Guard against non-array responses to prevent .forEach crashes later
+                setResources(Array.isArray(data) ? data : []);
                 setIsLoading(false);
             })
             .catch(err => {

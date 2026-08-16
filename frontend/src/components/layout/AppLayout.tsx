@@ -92,7 +92,7 @@ export function AppLayout() {
             }
         };
         checkHealth();
-        interval = setInterval(checkHealth, 60000); // Check every minute
+        interval = setInterval(checkHealth, 900000); // Check every 15 minutes
         return () => clearInterval(interval);
     }, [token]);
 
