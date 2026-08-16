@@ -22,13 +22,11 @@ class ReportType(str, enum.Enum):
     RESOURCE_INVENTORY = "resource_inventory"
     CUSTOM_QUERY = "custom_query"
 
-
 class ReportStatus(str, enum.Enum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"
     FAILED = "failed"
-
 
 class Report(Base):
     __tablename__ = "reports"

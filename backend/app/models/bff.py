@@ -11,7 +11,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -88,8 +88,11 @@ class Integration(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
-
     integration_key: Mapped[str] = mapped_column(String(64), nullable=False)  # e.g. "aws_role"
+
+    __table_args__ = (
+        UniqueConstraint('customer_id', 'integration_key', name='uq_customer_integration_key'),
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     provider: Mapped[str] = mapped_column(String(32), nullable=False)  # aws | gcp | azure | agent
     category: Mapped[str] = mapped_column(String(32), default="secure")

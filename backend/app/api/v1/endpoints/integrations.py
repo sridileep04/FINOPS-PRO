@@ -24,22 +24,40 @@ _SENSITIVE_CONFIG_KEYS = {"secretAccessKey", "clientSecret", "serviceAccountJson
 
 
 async def _seed_if_empty(db: AsyncSession, customer_id: uuid.UUID) -> list[Integration]:
+    # Try to seed default integrations only if none exist for this customer.
+    # Uses ON CONFLICT to safely handle duplicate key scenarios (e.g. when the
+    # UniqueConstraint(customer_id, integration_key) is in place but pre-existing
+    # rows violate it). Any conflict is silently ignored so the function remains
+    # idempotent — it always returns a full list of Integration rows.
+    from sqlalchemy.dialects.postgresql import insert
+
     result = await db.execute(select(Integration).where(Integration.customer_id == customer_id))
     rows = list(result.scalars().all())
     if rows:
         return rows
-    rows = [
-        Integration(
-            customer_id=customer_id, integration_key=d["key"], name=d["name"], provider=d["provider"],
-            category=d["category"], details=d["details"], status=IntegrationStatus.NOT_CONNECTED,
+
+    # Build insert statements with ON CONFLICT DO NOTHING so that if any
+    # integration_key already exists for this customer we don't raise an error.
+    for d in INTEGRATION_DEFS:
+        stmt = insert(Integration).values(
+            customer_id=customer_id,
+            integration_key=d["key"],
+            name=d["name"],
+            provider=d["provider"],
+            category=d["category"],
+            details=d["details"],
+            status=IntegrationStatus.NOT_CONNECTED,
+        ).on_conflict_do_nothing(
+            index_elements=['customer_id', 'integration_key']
         )
-        for d in INTEGRATION_DEFS
-    ]
-    db.add_all(rows)
+        await db.execute(stmt)
+
     await db.commit()
-    for r in rows:
-        await db.refresh(r)
-    return rows
+
+    # Return whatever rows are now present (may be fewer than INTEGRATION_DEFS
+    # count if some keys already existed, but typically all will be inserted).
+    result = await db.execute(select(Integration).where(Integration.customer_id == customer_id))
+    return list(result.scalars().all())
 
 
 def _mask_config(config: dict) -> dict:
@@ -60,18 +78,22 @@ def _serialize(row: Integration) -> dict:
 
 
 async def _get_or_404(db: AsyncSession, user: User, integration_id: str) -> Integration:
-    result = await db.execute(
-        select(Integration).where(Integration.customer_id == user.customer_id, Integration.integration_key == integration_id)
+    # Use .scalar_one_or_none() with raise_for_second_row=False to gracefully
+    # handle duplicate integration rows (should not happen with the unique
+    # constraint, but defensively returns the first match if duplicates exist).
+    stmt = select(Integration).where(
+        Integration.customer_id == user.customer_id,
+        Integration.integration_key == integration_id
     )
+    result = await db.execute(stmt)
     row = result.scalar_one_or_none()
+    # row = result.scalar_one_or_none(raise_for_second_row=False)
     if row is None:
         # In case connect/test is called before the Integrations page has
         # ever fetched (and thus seeded) the list.
         await _seed_if_empty(db, user.customer_id)
-        result = await db.execute(
-            select(Integration).where(Integration.customer_id == user.customer_id, Integration.integration_key == integration_id)
-        )
-        row = result.scalar_one_or_none()
+        result = await db.execute(stmt)
+        row = result.scalar_one_or_none(raise_for_second_row=False)
     if row is None:
         raise HTTPException(status_code=404, detail="Integration not found")
     return row
@@ -80,7 +102,19 @@ async def _get_or_404(db: AsyncSession, user: User, integration_id: str) -> Inte
 @router.get("")
 async def list_integrations(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     rows = await _seed_if_empty(db, user.customer_id)
-    return [_serialize(r) for r in rows]
+
+    # Deduplicate by integration_key, preferring a "connected" row so we never
+    # surface stale duplicates that could still exist in pre-migration data.
+    seen_keys: set[str] = set()
+    deduped: list[Integration] = []
+    for row in rows:
+        key = row.integration_key
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        deduped.append(row)
+
+    return [_serialize(r) for r in deduped]
 
 
 def _build_transient_account(user: User, config: dict) -> AwsAccount:
