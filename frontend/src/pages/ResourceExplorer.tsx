@@ -26,9 +26,7 @@ interface Resource {
 
 export default function ResourceExplorer() {
     const { token } = useAuth();
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const defaultDate = yesterday.toISOString().split('T')[0];
+    const defaultDate = new Date().toISOString().split('T')[0];
 
     const [resources, setResources] = useState<Resource[]>([]);
     const [availableTypes, setAvailableTypes] = useState<string[]>([]);

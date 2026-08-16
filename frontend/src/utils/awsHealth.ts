@@ -8,7 +8,7 @@ export async function checkAwsConnection(token: string): Promise<boolean> {
         });
         if (!res.ok) return false;
         const data = await res.json();
-        return data.status === 'connected';
+        return data.status === 'connected' || data.status === 'warning';
     } catch (error) {
         console.error('AWS health check failed', error);
         return false;
