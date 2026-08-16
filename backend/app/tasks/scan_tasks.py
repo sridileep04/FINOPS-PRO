@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from datetime import date, datetime, timezone
-
 from sqlalchemy import select
 
 from app.core.request_context import request_id_var
@@ -14,6 +13,7 @@ from app.services import analysis_service
 from app.services.resource_scanner_service import collect_account_data
 from app.tasks.celery_app import celery_app
 from app.tasks.report_tasks import SyncSessionLocal
+from app.services import pricing_service
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,8 @@ def _upsert_resource_snapshots(db, account: AwsAccount, scan_run_id, resource_ty
 
         attributes = row.get("attributes") or {}
         tags = row.get("tags")
+        estimated_cost = pricing_service.estimate_monthly_cost(db, resource_type, row.get("region"), attributes)
+        
 
         if existing:
             existing.attributes = attributes

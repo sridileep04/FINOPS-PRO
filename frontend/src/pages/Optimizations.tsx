@@ -21,12 +21,13 @@ import {
     Sparkles,
     ChevronRight,
     Clock,
-    ArrowRight
+    ArrowRight,
+    Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { Tooltip } from '@/components/ui/Tooltip';
-
+import { UtilizationChartModal } from '@/components/charts/UtilizationChartModal';
 export interface OptimizationActionStep {
     step: number;
     action: string;
@@ -73,6 +74,7 @@ export default function Optimizations() {
         waste: 0,
         appliedSavings: 0
     });
+    const [utilizationTarget, setUtilizationTarget] = useState<{ id: string; name: string } | null>(null);
 
     // Load optimizations & dashboard summary
     const fetchData = async () => {
@@ -514,6 +516,16 @@ export default function Optimizations() {
                                                             <Play className="h-3 w-3" />
                                                             View Plan
                                                         </Button>
+                                                        {opt.category === 'compute' && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                onClick={() => setUtilizationTarget({ id: opt.resource_id, name: opt.resource_name })}
+                                                                className="h-8 px-3 border border-brand-content/5 rounded-lg text-xs"
+                                                            >
+                                                                <Activity className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        )}
                                                     </>
                                                 )}
 
@@ -716,6 +728,14 @@ export default function Optimizations() {
                     </div>
                 )}
             </AnimatePresence>
+            {/* Utilization chart modal */}
+            {utilizationTarget && (
+                <UtilizationChartModal
+                    resourceId={utilizationTarget.id}
+                    resourceName={utilizationTarget.name}
+                    onClose={() => setUtilizationTarget(null)}
+                />
+            )}
         </div>
     );
 }

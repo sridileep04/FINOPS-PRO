@@ -28,7 +28,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const storedUser = localStorage.getItem('user');
 
         if (storedToken && storedUser) {
-            // Safely remove any surrounding quotes in case it was stored as JSON string previously
             const sanitizedToken = storedToken.replace(/^"|"$/g, '').trim();
             setToken(sanitizedToken);
             try {
@@ -52,6 +51,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
     };
+
+    // Global fetch interceptor (src/utils/authFetchInterceptor.ts) dispatches
+    // this event whenever any /api/* call comes back 401 -- e.g. an expired
+    // JWT after the tab's been open a long time. Clearing auth state here
+    // makes ProtectedRoute's `if (!user) return <Navigate to="/login" />`
+    // kick in on the next render, with no per-page fetch changes needed.
+    useEffect(() => {
+        const handleUnauthorized = () => {
+            logout();
+        };
+        window.addEventListener('auth:unauthorized', handleUnauthorized);
+        return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    }, []);
 
     return (
         <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>

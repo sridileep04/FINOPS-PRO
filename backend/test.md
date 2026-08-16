@@ -38,3 +38,6 @@ docker run -d   --name steampipe-service   --restart unless-stopped   -p 8001:80
   To query ->```SELECT * FROM users WHERE email ILIKE '%@gmail.com';```
   For extended->```\x```
   To quit->```\q```
+
+### Check celery
+  ```celery -A app.tasks.celery_app worker --loglevel=info```

@@ -171,7 +171,7 @@ def _write_connection_config(workspace: Path, auth: AuthPayload) -> None:
 connection "aws" {{
   plugin  = "aws"
   profile = "{ROLE_PROFILE_NAME}"
-  regions = ["{auth.region}"]
+  regions = ["*"]
 }}
 """
     else:
@@ -180,7 +180,7 @@ connection "aws" {{
   plugin     = "aws"
   access_key = "{auth.access_key_id}"
   secret_key = "{auth.secret_access_key}"
-  regions    = ["{auth.region}"]
+  regions    = ["*"]
 }}
 """
     spc_path = config_dir / "aws.spc"

@@ -7,7 +7,7 @@ celery_app = Celery(
     "finops",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.tasks.report_tasks", "app.tasks.scan_tasks"],
+    include=["app.tasks.report_tasks", "app.tasks.scan_tasks","app.tasks.pricing_tasks"],
 )
 
 celery_app.conf.update(
@@ -28,6 +28,10 @@ celery_app.conf.update(
         "nightly-account-scan": {
             "task": "scans.run_all_accounts",
             "schedule": crontab(hour=2, minute=0),  # 02:00 UTC daily
+        },
+        "daily-pricing-refresh": {
+        "task": "pricing.refresh_cache",
+        "schedule": crontab(hour=1, minute=0),  # change to crontab(day_of_week=1, hour=1, minute=0) for weekly instead
         },
     },
 )

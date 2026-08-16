@@ -35,6 +35,11 @@ async def get_summary(db: AsyncSession = Depends(get_db), user: User = Depends(g
         optimization_score = max(0, min(100, round(100 - (waste / current_spend * 100))))
 
     connection_status = bh.compute_connection_status(accounts)
+    scan_errors = await bh.latest_scan_errors(db, account_ids)
+    if scan_errors:
+        connection_status["serviceErrors"] = {**connection_status["serviceErrors"], **scan_errors}
+        if connection_status["status"] == "connected":
+            connection_status["status"] = "warning"
 
     return {
         "currentSpend": current_spend,

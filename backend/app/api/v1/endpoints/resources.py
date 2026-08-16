@@ -1,8 +1,8 @@
-from datetime import date
-
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timedelta, timezone,date
+from app.models.metric_sample import MetricSample
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
@@ -87,3 +87,48 @@ async def get_filters(db: AsyncSession = Depends(get_db), user: User = Depends(g
     )
     types = sorted(row[0] for row in result.all())
     return {"providers": ["AWS"] if types else [], "types": types}
+
+@router.get("/{resource_id}/utilization")
+async def get_resource_utilization(
+    resource_id: str,
+    range: str = Query("15d", pattern="^(15d|since_creation)$"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    accounts = await bh.get_customer_accounts(db, user.customer_id)
+    account_ids = [a.id for a in accounts]
+    if not account_ids:
+        return {"resource_id": resource_id, "resource_created_at": None, "points": []}
+
+    created_result = await db.execute(
+        select(func.min(ResourceSnapshot.resource_created_at))
+        .where(ResourceSnapshot.aws_account_id.in_(account_ids), ResourceSnapshot.resource_id == resource_id)
+    )
+    resource_created_at = created_result.scalar_one_or_none()
+
+    if range == "since_creation" and resource_created_at:
+        since = resource_created_at
+    else:
+        since = datetime.now(timezone.utc) - timedelta(days=15)
+
+    result = await db.execute(
+        select(MetricSample)
+        .where(
+            MetricSample.aws_account_id.in_(account_ids),
+            MetricSample.resource_id == resource_id,
+            MetricSample.metric_name == "cpu_utilization",
+            MetricSample.timestamp >= since,
+        )
+        .order_by(MetricSample.timestamp.asc())
+    )
+    samples = result.scalars().all()
+
+    return {
+        "resource_id": resource_id,
+        "resource_created_at": resource_created_at.isoformat() if resource_created_at else None,
+        "points": [
+            {"timestamp": s.timestamp.isoformat(), "average": float(s.average or 0),
+             "maximum": float(s.maximum or 0), "minimum": float(s.minimum or 0)}
+            for s in samples
+        ],
+    }

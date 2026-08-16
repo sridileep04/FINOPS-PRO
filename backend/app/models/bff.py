@@ -156,3 +156,21 @@ class AnomalyAcknowledgement(Base):
     customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
     anomaly_key: Mapped[str] = mapped_column(String(300), nullable=False)
     acknowledged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class PricingCache(Base):
+    """Caches AWS Price List Query API responses. Prices genuinely don't
+    change often -- we don't want a live GetProducts call (slow, rate
+    limited) on every single scan for every single resource."""
+
+    __tablename__ = "pricing_cache"
+    __table_args__ = (
+        UniqueConstraint("service_code", "sku_key", "region", name="uq_pricing_cache_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    service_code: Mapped[str] = mapped_column(String(32), nullable=False)   # AmazonEC2 | AmazonRDS
+    sku_key: Mapped[str] = mapped_column(String(255), nullable=False)       # e.g. "ec2:c7i-flex.large" or "ebs:gp3"
+    region: Mapped[str] = mapped_column(String(32), nullable=False)
+    price_per_unit_usd: Mapped[float | None] = mapped_column(Numeric(14, 6), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(32), nullable=True)     # "Hrs" | "GB-Mo"
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

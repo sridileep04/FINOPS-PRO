@@ -6,7 +6,6 @@ already collected into aws_accounts / resource_snapshots / daily_costs /
 findings, and reshapes it into the JSON contract the React app expects.
 """
 from __future__ import annotations
-
 import calendar
 import statistics
 import uuid
@@ -444,3 +443,58 @@ DEFAULT_PLATFORM_SETTINGS = {
     "cost_allocation_tags": {"active_tags": [], "enforcement": "soft"},
     "cloud_accounts_configured": {"aws": "", "gcp": "", "azure": ""},
 }
+
+
+import re
+
+_SCAN_ERROR_LABELS = {
+    "ec2_instance": "EC2",
+    "ebs_volume": "EBS",
+    "s3_bucket": "S3",
+    "rds_instance": "RDS",
+    "lambda_function": "Lambda",
+    "eip": "VPC / Elastic IP",
+    "security_group": "Security Groups",
+    "cpu_metrics": "CloudWatch (CPU Metrics)",
+    "daily_costs": "Cost Explorer (Daily Costs)",
+}
+
+_AWS_ACTION_RE = re.compile(r"\b([a-z0-9-]+:[A-Za-z][A-Za-z0-9]+)\b")
+
+
+def _shorten_scan_error(raw: str) -> str:
+    action_match = _AWS_ACTION_RE.search(raw)
+    if action_match and ("AccessDenied" in raw or "UnauthorizedOperation" in raw or "not authorized" in raw):
+        return f"Missing permission: {action_match.group(1)} (AccessDenied)"
+    return raw[:300]
+
+
+def parse_scan_errors(error_message: str | None) -> dict[str, str]:
+    """Reverses scan_tasks.py's `'; '.join(f'{k}: {v[:200]}' ...)` join
+    back into a {label: message} dict for the frontend."""
+    if not error_message:
+        return {}
+    out: dict[str, str] = {}
+    for segment in error_message.split("; "):
+        if ":" not in segment:
+            continue
+        key, _, raw = segment.partition(": ")
+        label = _SCAN_ERROR_LABELS.get(key, key)
+        out[label] = _shorten_scan_error(raw)
+    return out
+
+
+async def latest_scan_errors(db: AsyncSession, account_ids: list[uuid.UUID]) -> dict[str, str]:
+    """Merges the most recent scan's errors across all of a customer's
+    accounts into one {label: message} dict."""
+    scans = await sync_history(db, account_ids, limit=len(account_ids) or 1)
+    # sync_history already gives one row per most-recent scan per account
+    # ordered by started_at desc; take the newest per account_id.
+    seen_accounts: set = set()
+    merged: dict[str, str] = {}
+    for s in scans:
+        if s.aws_account_id in seen_accounts:
+            continue
+        seen_accounts.add(s.aws_account_id)
+        merged.update(parse_scan_errors(s.error_message))
+    return merged

@@ -11,7 +11,6 @@ down_revision = "0001"
 branch_labels = None
 depends_on = None
 
-
 def upgrade() -> None:
     # Remove pre-existing duplicate rows first, or the constraint add will fail.
     op.execute("""
