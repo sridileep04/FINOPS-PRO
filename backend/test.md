@@ -34,10 +34,30 @@ docker run -d   --name steampipe-service   --restart unless-stopped   -p 8001:80
   ```docker exec -it postgres psql -U finopsuser -d finopsdb```
   To list the users->```\d users```
   To list DB's->```\l```
+  To list all tables->```\dt```
   To switch DB's->```\c dbname```
   To query ->```SELECT * FROM users WHERE email ILIKE '%@gmail.com';```
   For extended->```\x```
   To quit->```\q```
 
-### Check celery
+### Run celery
   ```celery -A app.tasks.celery_app worker --loglevel=info```
+
+### Check the celery tasks
+  open redis cli->```docker exec -it redis redis-cli -n 1```
+  ```KEYS *```
+  ```LLEN celery```
+  ```LRANGE celery 0 -1```
+  Check how many keys are in Database 1 (-n 1)->```docker exec -it redis redis-cli -n 1 dbsize```
+  Check which databases have data->```docker exec -it redis redis-cli info keyspace```
+  To get the length of tasks->```docker exec -it redis redis-cli LLEN celery```
+  To get the keys->```docker exec -it redis redis-cli KEYS "*"```
+  View the 5 pending tasks```docker exec -it redis redis-cli LRANGE celery 0 4```
+  To open interactive shell```docker exec -it my-redis-container redis-cli```
+  or
+  ```pip install flower```
+  ```celery -A app.tasks.celery_app flower```
+  ```http://127.0.0.1:5555```
+
+### Trigger or run a celery task manually
+   ```celery -A app.tasks.celery_app:celery_app call pricing.refresh_cache```

@@ -43,17 +43,18 @@ def _upsert_resource_snapshots(db, account: AwsAccount, scan_run_id, resource_ty
         tags = row.get("tags")
         estimated_cost = pricing_service.estimate_monthly_cost(db, resource_type, row.get("region"), attributes)
         
-
         if existing:
             existing.attributes = attributes
             existing.tags = tags
             existing.region = row.get("region")
             existing.resource_created_at = created_at
+            existing.estimated_monthly_cost_usd = estimated_cost
         else:
             db.add(ResourceSnapshot(
                 aws_account_id=account.id, scan_run_id=scan_run_id, resource_id=resource_id,
                 resource_type=resource_type, region=row.get("region"), snapshot_date=today,
                 resource_created_at=created_at, tags=tags, attributes=attributes,
+                estimated_monthly_cost_usd=estimated_cost,
             ))
         count += 1
     return count
