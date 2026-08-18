@@ -461,12 +461,28 @@ _SCAN_ERROR_LABELS = {
 
 _AWS_ACTION_RE = re.compile(r"\b([a-z0-9-]+:[A-Za-z][A-Za-z0-9]+)\b")
 
+# Infrastructure-side failures (our steampipe-service, not the customer's
+# IAM setup) -- never the customer's fault, always safe to summarize
+# generically rather than showing raw internals.
+_TRANSIENT_ERROR_PATTERNS = (
+    "cannot listen on port",
+    "failed to connect to",
+    "x509:",
+    "502:",
+    "504:",
+    "does not exist",
+)
+
 
 def _shorten_scan_error(raw: str) -> str:
     action_match = _AWS_ACTION_RE.search(raw)
     if action_match and ("AccessDenied" in raw or "UnauthorizedOperation" in raw or "not authorized" in raw):
         return f"Missing permission: {action_match.group(1)} (AccessDenied)"
-    return raw[:300]
+    if any(pattern in raw for pattern in _TRANSIENT_ERROR_PATTERNS):
+        return "Temporary connectivity issue collecting this data -- will retry on the next scan."
+    cleaned = raw.replace("steampipe-service returned 502: steampipe query failed:", "")
+    cleaned = cleaned.replace("steampipe query failed:", "").strip()
+    return cleaned[:300] or "Unable to complete this check right now."
 
 
 def parse_scan_errors(error_message: str | None) -> dict[str, str]:
@@ -483,18 +499,33 @@ def parse_scan_errors(error_message: str | None) -> dict[str, str]:
         out[label] = _shorten_scan_error(raw)
     return out
 
+async def _latest_scan_per_account(db: AsyncSession, account_ids: list[uuid.UUID]) -> list[ScanRun]:
+    if not account_ids:
+        return []
+    latest_subq = (
+        select(
+            ScanRun.aws_account_id,
+            func.max(ScanRun.started_at).label("max_started"),
+        )
+        .where(ScanRun.aws_account_id.in_(account_ids))
+        .group_by(ScanRun.aws_account_id)
+        .subquery()
+    )
+    stmt = select(ScanRun).join(
+        latest_subq,
+        (ScanRun.aws_account_id == latest_subq.c.aws_account_id)
+        & (ScanRun.started_at == latest_subq.c.max_started),
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
 
 async def latest_scan_errors(db: AsyncSession, account_ids: list[uuid.UUID]) -> dict[str, str]:
-    """Merges the most recent scan's errors across all of a customer's
-    accounts into one {label: message} dict."""
-    scans = await sync_history(db, account_ids, limit=len(account_ids) or 1)
-    # sync_history already gives one row per most-recent scan per account
-    # ordered by started_at desc; take the newest per account_id.
-    seen_accounts: set = set()
+    """Merges each account's *own* most recent scan's errors into one
+    {label: message} dict -- guaranteed one row per account, regardless of
+    how often other accounts have scanned since."""
+    scans = await _latest_scan_per_account(db, account_ids)
     merged: dict[str, str] = {}
     for s in scans:
-        if s.aws_account_id in seen_accounts:
-            continue
-        seen_accounts.add(s.aws_account_id)
         merged.update(parse_scan_errors(s.error_message))
     return merged
