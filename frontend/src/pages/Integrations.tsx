@@ -737,7 +737,8 @@ export default function Integrations() {
                                                                                 "organizations:ListAccounts",
                                                                                 "cur:DescribeReportDefinitions",
                                                                                 "cloudwatch:GetMetricData",
-                                                                                "cloudwatch:GetMetricStatistics"
+                                                                                "cloudwatch:GetMetricStatistics",
+                                                                                "pricing:GetProducts"
                                                                             ],
                                                                             Resource: "*"
                                                                         }
@@ -782,7 +783,8 @@ export default function Integrations() {
         "organizations:ListAccounts",
         "cur:DescribeReportDefinitions",
         "cloudwatch:GetMetricData",
-        "cloudwatch:GetMetricStatistics"
+        "cloudwatch:GetMetricStatistics",
+        "pricing:GetProducts"
       ],
       "Resource": "*"
     }
@@ -901,7 +903,8 @@ export default function Integrations() {
                                                                             "organizations:ListAccounts",
                                                                             "cur:DescribeReportDefinitions",
                                                                             "cloudwatch:GetMetricData",
-                                                                            "cloudwatch:GetMetricStatistics"
+                                                                            "cloudwatch:GetMetricStatistics",
+                                                                            "pricing:GetProducts"
                                                                         ],
                                                                         Resource: "*"
                                                                     }
@@ -946,7 +949,8 @@ export default function Integrations() {
         "organizations:ListAccounts",
         "cur:DescribeReportDefinitions",
         "cloudwatch:GetMetricData",
-        "cloudwatch:GetMetricStatistics"
+        "cloudwatch:GetMetricStatistics",
+        "pricing:GetProducts"
       ],
       "Resource": "*"
     }

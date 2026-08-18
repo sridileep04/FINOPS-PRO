@@ -93,13 +93,15 @@ export default function Dashboard() {
 
     if (!summary) return <div className="animate-pulse flex space-x-4"><div className="flex-1 space-y-4 py-1"><div className="h-4 bg-slate-800 rounded w-3/4"></div></div></div>;
 
-    const hasResources = Boolean(
-        summary.projectedSpend > 0 ||
-        summary.currentSpend > 0 ||
-        summary.savingsPotential > 0 ||
-        summary.waste > 0 ||
-        summary.awsConnectionStatus?.status === 'connected'
-    );
+    // const hasResources = Boolean(
+    //     summary.projectedSpend > 0 ||
+    //     summary.currentSpend > 0 ||
+    //     summary.savingsPotential > 0 ||
+    //     summary.waste > 0 ||
+    //     summary.awsConnectionStatus?.status === 'connected'
+    // );
+    //commented above to check the number of connected accounts instead of checking for spend values, as spend values can be zero even if accounts are connected.
+    const hasResources = Boolean(summary.accountsConnected > 0);
 
     return (
         <motion.div

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     # concurrent report/scan requests across tenants.
     MAX_CONCURRENT_QUERIES: int = 8
 
+    # Steampipe's embedded Postgres defaults to a single fixed port; since
+    # slots run concurrently, each needs its own so they don't collide.
+    STEAMPIPE_DATABASE_BASE_PORT: int = 9193
+
     # Platform's own AWS identity used to assume each customer's
     # cross-account role. Leave unset in real deployments running on
     # ECS/EC2 -- the container's own task role / instance profile is used

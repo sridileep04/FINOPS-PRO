@@ -219,6 +219,11 @@ async def execute_query(auth: AuthPayload, sql: str) -> list[dict]:
         _write_connection_config(workspace, auth)
         env = _env_for_workspace(workspace, auth)
 
+        # Each pool slot is named "slot-<N>"; give it its own database port
+        # so concurrent slots don't race for the same default port (9193).
+        slot_index = int(workspace.name.rsplit("-", 1)[-1])
+        database_port = settings.STEAMPIPE_DATABASE_BASE_PORT + slot_index
+
         cmd = [
             settings.STEAMPIPE_BIN,
             "query",
@@ -228,6 +233,8 @@ async def execute_query(auth: AuthPayload, sql: str) -> list[dict]:
             "--install-dir",
             str(workspace),
             "--input=false",
+            "--database-port",
+            str(database_port),
         ]
 
         proc = await asyncio.create_subprocess_exec(
