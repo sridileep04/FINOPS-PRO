@@ -647,5 +647,5 @@ docker run -d \
   -e STEAMPIPE_INSTALL_DIR='/home/steampipe/.steampipe' \
   -e STEAMPIPE_WORKSPACES_DIR='/home/steampipe/workspaces' \
   -e PLATFORM_CREDENTIAL_SOURCE='Ec2InstanceMetadata' \
-  steampipe-custom
+  cloud-service
   '''

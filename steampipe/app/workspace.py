@@ -160,6 +160,30 @@ def _write_aws_profile_files(workspace: Path, auth: AuthPayload) -> None:
     os.chmod(config_path, 0o600)
 
 
+def _write_database_options(workspace: Path, database_port: int) -> None:
+    """Pins this slot's embedded Postgres to its own port.
+
+    There is no `--database-port` CLI flag on `steampipe query`, and no
+    STEAMPIPE_DATABASE_PORT env var either -- `port` is one of the few
+    database options with no environment-variable override (see
+    https://steampipe.io/docs/reference/config-files/options). The only
+    way to set it is this HCL options block in a config file, which is
+    why it has to be rewritten every request alongside aws.spc: the
+    whole config/ dir is wiped between requests in _wipe_credentials.
+    """
+    config_dir = workspace / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    options_path = config_dir / "database.spc"
+    options_path.write_text(
+        f"""
+options "database" {{
+  port   = {database_port}
+  listen = "local"
+}}
+"""
+    )
+
+
 def _write_connection_config(workspace: Path, auth: AuthPayload) -> None:
     #logger.info("In _write_connection_config with workspace: %s and auth: %s", workspace, auth)
     config_dir = workspace / "config"
@@ -216,13 +240,16 @@ async def execute_query(auth: AuthPayload, sql: str) -> list[dict]:
     workspace = await pool.get()
 
     try:
-        _write_connection_config(workspace, auth)
-        env = _env_for_workspace(workspace, auth)
-
         # Each pool slot is named "slot-<N>"; give it its own database port
-        # so concurrent slots don't race for the same default port (9193).
+        # (via an options "database" config block -- see
+        # _write_database_options) so concurrent slots don't race for the
+        # same default port (9193).
         slot_index = int(workspace.name.rsplit("-", 1)[-1])
         database_port = settings.STEAMPIPE_DATABASE_BASE_PORT + slot_index
+
+        _write_connection_config(workspace, auth)
+        _write_database_options(workspace, database_port)
+        env = _env_for_workspace(workspace, auth)
 
         cmd = [
             settings.STEAMPIPE_BIN,
@@ -233,8 +260,6 @@ async def execute_query(auth: AuthPayload, sql: str) -> list[dict]:
             "--install-dir",
             str(workspace),
             "--input=false",
-            "--database-port",
-            str(database_port),
         ]
 
         proc = await asyncio.create_subprocess_exec(
