@@ -31,6 +31,8 @@ docker run -d   --name steampipe-service   --restart unless-stopped   -p 8001:80
 
   ```docker exec -it postgres /bin/bash```
   or
+  ```docker exec -it my-postgres-container psql -U postgres -d your_database_name```
+  or
   ```docker exec -it postgres psql -U finopsuser -d finopsdb```
   To list the users->```\d users```
   To list DB's->```\l```
