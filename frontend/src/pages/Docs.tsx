@@ -47,9 +47,9 @@ export default function Docs() {
                             <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
                                 <Sparkles className="w-4 h-4 animate-pulse" /> Core System Architecture
                             </div>
-                            <h1 className="text-2xl font-bold tracking-tight text-brand-content">GhostFinOps Core Philosophy</h1>
+                            <h1 className="text-2xl font-bold tracking-tight text-brand-content">Marigold FinOps Core Philosophy</h1>
                             <p className="text-sm text-brand-content/60 leading-relaxed">
-                                GhostFinOps is an Autonomous Cloud Cost Intelligence Platform engineered for intensive multi-tenant cloud operations.
+                                MariGold FinOps is an Autonomous Cloud Cost Intelligence Platform engineered for intensive multi-tenant cloud operations.
                                 The framework operates as a dual-ingestion engine, balancing continuous pull-based metadata synchronizations with reactive event-driven push telemetry from running workloads.
                             </p>
                         </div>
@@ -74,7 +74,7 @@ export default function Docs() {
                                     </div>
                                     <h3 className="text-xs font-bold text-brand-content uppercase tracking-wider">2. Local CLI Agent (Push Protocol)</h3>
                                     <p className="text-[11px] text-brand-content/40 leading-relaxed">
-                                        A lightweight Python execution daemon (<code className="text-purple-400 font-mono">agent.py</code>) running inside your internal VPC. This agent reads local kubernetes contexts or system metadata, compresses the payload using gzip, encrypts via AES-256-GCM, and streams directly to GhostFinOps over HTTPS with zero inbound port requirements.
+                                        A lightweight Python execution daemon (<code className="text-purple-400 font-mono">agent.py</code>) running inside your internal VPC. This agent reads local kubernetes contexts or system metadata, compresses the payload using gzip, encrypts via AES-256-GCM, and streams directly to Marigold FinOps over HTTPS with zero inbound port requirements.
                                     </p>
                                 </CardContent>
                             </Card>
@@ -85,7 +85,7 @@ export default function Docs() {
                                 <Info className="w-4 h-4 text-indigo-400" /> FinOps Data Capture Priority Waterfall
                             </h3>
                             <p className="text-xs text-brand-content/50 leading-relaxed">
-                                To guarantee optimal accuracy while preventing costly CloudWatch API usage inflation, GhostFinOps orchestrates data retrieval in a strict cascading pattern:
+                                To guarantee optimal accuracy while preventing costly CloudWatch API usage inflation, Marigold FinOps orchestrates data retrieval in a strict cascading pattern:
                             </p>
                             <div className="space-y-2 text-xs font-mono">
                                 <div className="flex gap-3 items-start">
@@ -115,8 +115,8 @@ export default function Docs() {
                 );
 
             case 'aws_role':
-                const tfRole = `resource "aws_iam_role" "ghost_finops_role" {
-  name = "AetherFinReadOnlyRole"
+                const tfRole = `resource "aws_iam_role" "marigold_finops_role" {
+  name = "MarigoldFinReadOnlyRole"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -124,12 +124,12 @@ export default function Docs() {
       {
         Effect = "Allow"
         Principal = {
-          AWS = "arn:aws:iam::236782813401:root" # GhostFinOps AWS SaaS Account
+          AWS = "arn:aws:iam::236782813401:root" # Marigold FinOps AWS SaaS Account
         }
         Action = "sts:AssumeRole"
         Condition = {
           StringEquals = {
-            "sts:ExternalId" = "aetherfin_ext_dk_236782813401"
+            "sts:ExternalId" = "marigoldfin_ext_dk_236782813401"
           }
         }
       }
@@ -138,12 +138,12 @@ export default function Docs() {
 }
 
 resource "aws_iam_role_policy_attachment" "readonly_attach" {
-  role       = aws_iam_role.ghost_finops_role.name
+  role       = aws_iam_role.marigold_finops_role.name
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }`;
 
                 const cliRole = `aws iam create-role \\
-  --role-name AetherFinReadOnlyRole \\
+  --role-name MarigoldFinReadOnlyRole \\
   --assume-role-policy-document '{
     "Version": "2012-10-17",
     "Statement": [
@@ -152,14 +152,14 @@ resource "aws_iam_role_policy_attachment" "readonly_attach" {
         "Principal": { "AWS": "arn:aws:iam::236782813401:root" },
         "Action": "sts:AssumeRole",
         "Condition": {
-          "StringEquals": { "sts:ExternalId": "aetherfin_ext_dk_236782813401" }
+          "StringEquals": { "sts:ExternalId": "marigoldfin_ext_dk_236782813401" }
         }
       }
     ]
   }'
 
 aws iam attach-role-policy \\
-  --role-name AetherFinReadOnlyRole \\
+  --role-name MarigoldFinReadOnlyRole \\
   --policy-arn arn:aws:iam::aws:policy/ReadOnlyAccess`;
 
                 return (
@@ -170,7 +170,7 @@ aws iam attach-role-policy \\
                             </div>
                             <h1 className="text-2xl font-bold tracking-tight text-brand-content">AWS Cross-Account AssumeRole Setup</h1>
                             <p className="text-sm text-brand-content/60 leading-relaxed">
-                                This integration is the recommended path for production environments. It authorizes GhostFinOps to query metadata securely using dynamic AWS Security Token Service (STS) temporary sessions, avoiding the creation or storage of static IAM access keys.
+                                This integration is the recommended path for production environments. It authorizes Marigold FinOps to query metadata securely using dynamic AWS Security Token Service (STS) temporary sessions, avoiding the creation or storage of static IAM access keys.
                             </p>
                         </div>
 
@@ -183,11 +183,11 @@ aws iam attach-role-policy \\
                                 </div>
                                 <div className="p-3 bg-black/40 rounded-xl space-y-1">
                                     <span className="text-indigo-400 font-bold">Step 2: External ID Matching</span>
-                                    <p className="text-[11px] leading-relaxed">Use the unique ID <code className="text-brand-content">aetherfin_ext_dk_236782813401</code> to secure sessions from third-party hijacking.</p>
+                                    <p className="text-[11px] leading-relaxed">Use the unique ID <code className="text-brand-content">marigoldfin_ext_dk_236782813401</code> to secure sessions from third-party hijacking.</p>
                                 </div>
                                 <div className="p-3 bg-black/40 rounded-xl space-y-1">
                                     <span className="text-indigo-400 font-bold">Step 3: Registration</span>
-                                    <p className="text-[11px] leading-relaxed">Register the Role ARN inside GhostFinOps Integrations portal to kick-start synchronization.</p>
+                                    <p className="text-[11px] leading-relaxed">Register the Role ARN inside Marigold FinOps Integrations portal to kick-start synchronization.</p>
                                 </div>
                             </div>
                         </div>
@@ -237,9 +237,10 @@ aws iam attach-role-policy \\
         "ce:GetReservationUtilization",
         "ce:GetSavingsPlansUtilization",
         "ce:GetAnomalies",
-        "ec2:DescribeInstances",
-        "ec2:DescribeVolumes",
-        "ec2:DescribeAddresses",
+        "ec2:Describe*",
+        "ec2:Get*",
+        "tag:GetResources",
+        "sts:GetCallerIdentity",
         "rds:DescribeDBInstances",
         "lambda:ListFunctions",
         "s3:ListAllMyBuckets",
@@ -334,8 +335,8 @@ aws iam attach-role-policy \\
                                     <div className="flex gap-3 items-start bg-brand-content/[0.01] p-3 border border-brand-content/5 rounded-xl">
                                         <span className="w-5 h-5 rounded bg-indigo-500/10 text-indigo-400 font-bold flex items-center justify-center shrink-0">3</span>
                                         <div className="space-y-1">
-                                            <span className="text-brand-content font-bold">Connect S3 Hook inside GhostFinOps:</span>
-                                            <p className="text-[11px]">Enter your bucket name and region into AetherFin's integrations dashboard. AetherFin will automatically configure analytical indexes over incoming billing CSV files.</p>
+                                            <span className="text-brand-content font-bold">Connect S3 Hook inside Marigold FinOps:</span>
+                                            <p className="text-[11px]">Enter your bucket name and region into Marigold FinOps' integrations dashboard. Marigold FinOps will automatically configure analytical indexes over incoming billing CSV files.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -355,14 +356,14 @@ resource "google_iam_workload_identity_pool_provider" "aetherfin_provider" {
   workload_identity_pool_provider_id = "aetherfin-saas-provider"
   
   aws {
-    account_id = "236782813401" # GhostFinOps AWS principal account ID
+    account_id = "236782813401" # Marigold FinOps AWS principal account ID
   }
 }
 
 resource "google_service_account_iam_member" "wif_binding" {
   service_account_id = "projects/my-gcp-project/serviceAccounts/aetherfin-viewer-sa@my-gcp-project.iam.gserviceaccount.com"
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/\${google_iam_workload_identity_pool.aetherfin_pool.name}/attribute.aws_role/arn:aws:sts::236782813401:assumed-role/GhostFinOpsSaaSWorker/session"
+  member             = "principalSet://iam.googleapis.com/\${google_iam_workload_identity_pool.aetherfin_pool.name}/attribute.aws_role/arn:aws:sts::236782813401:assumed-role/MarigoldFinOpsSaaSWorker/session"
 }`;
                 return (
                     <div className="space-y-6">
@@ -450,7 +451,7 @@ az role assignment create \\
                             </div>
                             <h1 className="text-2xl font-bold tracking-tight text-brand-content">Azure Service Principal Integration</h1>
                             <p className="text-sm text-brand-content/60 leading-relaxed">
-                                Connects Azure subscription environments to GhostFinOps using an Azure Active Directory App Registration and a Reader role assignment. This configures standard access to Cost Management + Billing APIs securely.
+                                Connects Azure subscription environments to Marigold FinOps using an Azure Active Directory App Registration and a Reader role assignment. This configures standard access to Cost Management + Billing APIs securely.
                             </p>
                         </div>
 
@@ -495,9 +496,9 @@ python3 agent.py \\
                             <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
                                 <Terminal className="w-4 h-4" /> Live push metrics daemon
                             </div>
-                            <h1 className="text-2xl font-bold tracking-tight text-brand-content">GhostFinOps Agent.py setup</h1>
+                            <h1 className="text-2xl font-bold tracking-tight text-brand-content">Marigold FinOps Agent.py setup</h1>
                             <p className="text-sm text-brand-content/60 leading-relaxed">
-                                The GhostFinOps Agent is a lightweight python daemon designed to run within private isolated clusters. It connects directly to internal container statistics, tracking live cost profiles and real-time GPU/vCPU utilization.
+                                The MariFinOps Agent is a lightweight python daemon designed to run within private isolated clusters. It connects directly to internal container statistics, tracking live cost profiles and real-time GPU/vCPU utilization.
                             </p>
                         </div>
 
@@ -587,7 +588,7 @@ python3 agent.py \\
                                 <div className="space-y-1">
                                     <h4 className="text-xs font-bold text-brand-content uppercase tracking-wider">3. Establish Spend Thresholds and Anomaly Rules</h4>
                                     <p className="text-xs text-brand-content/40 leading-relaxed">
-                                        Visit the <code className="text-brand-content">Settings</code> dashboard to configure team budgets, custom limits, and webhook alert rules. GhostFinOps' engine continuously monitors baseline deviations, throwing anomalies instantly if daily run rates increase exponentially.
+                                        Visit the <code className="text-brand-content">Settings</code> dashboard to configure team budgets, custom limits, and webhook alert rules. Marigold FinOps' engine continuously monitors baseline deviations, throwing anomalies instantly if daily run rates increase exponentially.
                                     </p>
                                 </div>
                             </div>

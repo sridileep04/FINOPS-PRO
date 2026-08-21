@@ -102,9 +102,35 @@ export default function Integrations() {
         ? "IAM Role name is invalid. Alphanumeric, max 64 chars, and can include +=,.@_- characters."
         : null;
 
+    const AWS_ACCOUNT_INTEGRATION_IDS = ['aws_role', 'aws_keys'];
+
+    // Every already-connected AWS account number for this customer,
+    // mapped to which method (aws_role/aws_keys) it's connected under.
+    // Used to warn the customer the moment they type in an account ID
+    // that's already configured, instead of only finding out after
+    // Test/Connect round-trips to the backend.
+    const connectedAccountMethods = React.useMemo(() => {
+        const map = new Map<string, string>();
+        integrations.forEach((it) => {
+            if (AWS_ACCOUNT_INTEGRATION_IDS.includes(it.id) && it.awsAccountNumber) {
+                map.set(it.awsAccountNumber, it.id);
+            }
+        });
+        return map;
+    }, [integrations]);
+
+    const duplicateAccountMethod = (activeSetup && AWS_ACCOUNT_INTEGRATION_IDS.includes(activeSetup.id) && rawAccountId.length > 0)
+        ? connectedAccountMethods.get(rawAccountId) || null
+        : null;
+    // Same account + same method = this submission will just update
+    // (rotate) that existing connection's credentials, which is fine.
+    // Same account + the *other* method is the real conflict.
+    const isDuplicateAccountConflict = !!duplicateAccountMethod && duplicateAccountMethod !== activeSetup?.id;
+    const duplicateAccountLabel = duplicateAccountMethod === 'aws_role' ? 'AWS Cross-Account Role' : 'AWS Access Keys';
+
     const isFormValid = activeSetup?.id === 'aws_role'
-        ? (isAccountIdValid && isRoleNameValid && isExternalIdValid)
-        : true;
+        ? (isAccountIdValid && isRoleNameValid && isExternalIdValid && !isDuplicateAccountConflict)
+        : !isDuplicateAccountConflict;
 
     const copyToClipboard = (text: string, fieldId: string) => {
         navigator.clipboard.writeText(text);
@@ -120,18 +146,52 @@ export default function Integrations() {
         })
             .then(res => res.json())
             .then((data: any[]) => {
-                // Deduplicate by id, preferring connected ones
-                const seen = new Set<string>();
-                const deduped = data.filter((item: any) => {
-                    if (seen.has(item.id)) {
-                        return false;
-                    }
-                    seen.add(item.id);
-                    return true;
-                });
-                setIntegrations(deduped);
+                // Every row is kept now -- an aws_role/aws_keys card can have
+                // several connected-account rows behind one template row.
+                // Grouping (one card per integration id) happens at render
+                // time in `groupedIntegrations`, not here.
+                setIntegrations(data);
             })
             .catch(err => console.error("Error fetching integrations", err));
+    };
+
+    // One card per integration id: the "template" row (always present,
+    // drives the card's name/details/Connect button) plus, for AWS
+    // role/keys, however many real AWS accounts are connected under it.
+    const groupedIntegrations = React.useMemo(() => {
+        const map = new Map<string, { template: any; connections: any[] }>();
+        integrations.forEach((it) => {
+            const isAwsAccountKind = AWS_ACCOUNT_INTEGRATION_IDS.includes(it.id);
+            const g = map.get(it.id) || { template: null, connections: [] as any[] };
+            if (!isAwsAccountKind || it.isTemplate) {
+                g.template = it;
+            } else {
+                g.connections.push(it);
+            }
+            map.set(it.id, g);
+        });
+        return Array.from(map.values()).filter((g) => g.template);
+    }, [integrations]);
+
+    const deleteConnection = async (connectionId: string) => {
+        if (!token) return;
+        if (!window.confirm('Remove this connection? Scans and cost data already collected for it are unaffected, but AetherFin will stop syncing it going forward.')) {
+            return;
+        }
+        try {
+            const res = await fetch(`/api/v1/integrations/connections/${connectionId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok || res.status === 204) {
+                fetchIntegrations();
+            } else {
+                const text = await res.text();
+                console.error('Failed to delete integration connection', text);
+            }
+        } catch (err) {
+            console.error('Failed to delete integration connection', err);
+        }
     };
 
     useEffect(() => {
@@ -257,6 +317,18 @@ export default function Integrations() {
                 closeSetup();
                 window.dispatchEvent(new CustomEvent('aetherfin:sync-success'));
             } else {
+                // e.g. 409 when this AWS account is already connected via
+                // the other auth method -- surface it in the modal instead
+                // of failing silently.
+                let message = 'Failed to save this connection.';
+                try {
+                    const body = await res.json();
+                    message = body.detail || message;
+                } catch {
+                    // non-JSON error body, fall back to the default message
+                }
+                setTestSuccess(false);
+                setTestError(message);
                 window.dispatchEvent(new CustomEvent('aetherfin:sync-error'));
             }
         } catch (err) {
@@ -282,7 +354,7 @@ export default function Integrations() {
 
     const getFieldsForIntegration = (id: string) => {
         switch (id) {
-            case 'aws_role': return [{ name: 'roleArn', label: 'IAM Role ARN', type: 'text', placeholder: 'arn:aws:iam::123456789012:role/GhostFinOpsRole' }];
+            case 'aws_role': return [{ name: 'roleArn', label: 'IAM Role ARN', type: 'text', placeholder: 'arn:aws:iam::123456789012:role/MarigoldFinOpsRole' }];
             case 'aws_keys': return [
                 { name: 'accessKeyId', label: 'Access Key ID', type: 'text', placeholder: 'AKIA...' },
                 { name: 'secretAccessKey', label: 'Secret Access Key', type: 'password', placeholder: '...' },
@@ -300,14 +372,14 @@ export default function Integrations() {
             ];
             case 'gcp_wif': return [
                 { name: 'projectNumber', label: 'Project Number', type: 'text', placeholder: '123456789012' },
-                { name: 'poolId', label: 'Workload Identity Pool ID', type: 'text', placeholder: 'ghostfinops-pool' },
-                { name: 'providerId', label: 'Provider ID', type: 'text', placeholder: 'ghostfinops-provider' }
+                { name: 'poolId', label: 'Workload Identity Pool ID', type: 'text', placeholder: 'marigoldfinops-pool' },
+                { name: 'providerId', label: 'Provider ID', type: 'text', placeholder: 'marigoldfinops-provider' }
             ];
             case 'gcp_api': return [
                 { name: 'serviceAccountJson', label: 'Service Account JSON', type: 'textarea', placeholder: '{\n  "type": "service_account",\n  "project_id": "..."\n}' }
             ];
             case 'azure_export': return [
-                { name: 'storageAccount', label: 'Storage Account Name', type: 'text', placeholder: 'ghostbillingstg' },
+                { name: 'storageAccount', label: 'Storage Account Name', type: 'text', placeholder: 'marigoldfinopsstg' },
                 { name: 'containerName', label: 'Container Name', type: 'text', placeholder: 'billing-exports' }
             ];
             case 'azure_sp': return [
@@ -338,9 +410,14 @@ export default function Integrations() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                {integrations.map((integration) => {
+                {groupedIntegrations.map(({ template: integration, connections }) => {
                     const typeDef = INTEGRATION_TYPES.find(t => t.id === integration.category.toLowerCase()) || INTEGRATION_TYPES[0];
                     const Icon = typeDef.icon;
+                    const isAwsAccountKind = AWS_ACCOUNT_INTEGRATION_IDS.includes(integration.id);
+                    const isConnected = isAwsAccountKind ? connections.length > 0 : integration.status === 'connected';
+                    const mostRecentSync = isAwsAccountKind && connections.length
+                        ? connections[0].lastSync
+                        : integration.lastSync;
 
                     return (
                         <motion.div key={integration.id} variants={item}>
@@ -352,9 +429,9 @@ export default function Integrations() {
                                             <Icon className="w-3 h-3" />
                                             {typeDef.name}
                                         </div>
-                                        {integration.status === 'connected' ? (
+                                        {isConnected ? (
                                             <span className="text-[10px] flex items-center gap-1 text-emerald-400 font-bold uppercase tracking-tighter">
-                                                <CheckCircle2 className="w-3 h-3" /> Connected
+                                                <CheckCircle2 className="w-3 h-3" /> Connected{isAwsAccountKind && connections.length > 1 ? ` (${connections.length})` : ''}
                                             </span>
                                         ) : (
                                             <span className="text-[10px] text-brand-content/30 uppercase tracking-tighter font-bold">
@@ -368,19 +445,77 @@ export default function Integrations() {
                                         <h3 className="text-sm font-bold text-brand-content">{integration.name}</h3>
                                     </div>
 
-                                    <p className="text-[11px] text-brand-content/60 flex-1">{integration.details}</p>
+                                    <p className="text-[11px] text-brand-content/60">{integration.details}</p>
+
+                                    {isAwsAccountKind && connections.length > 0 && (
+                                        <ul className="mt-3 space-y-1.5">
+                                            {connections.map((conn: any) => {
+                                                const perms = conn.permissions;
+                                                return (
+                                                    <li
+                                                        key={conn.connectionId}
+                                                        className="rounded-md border border-brand-content/10 bg-brand-content/[0.03] px-2 py-1.5"
+                                                    >
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div className="min-w-0">
+                                                                <p className="text-[11px] font-mono text-brand-content/80 truncate">
+                                                                    {conn.awsAccountNumber || 'Unknown account'}
+                                                                </p>
+                                                                <p className="text-[9px] text-brand-content/40 uppercase tracking-widest">
+                                                                    {conn.status === 'connected' ? `Synced ${conn.lastSync}` : conn.status}
+                                                                </p>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => deleteConnection(conn.connectionId)}
+                                                                title="Remove this connection"
+                                                                className="shrink-0 p-1 rounded-md text-brand-content/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+
+                                                        {perms && (perms.granted.length > 0 || perms.missing.length > 0) && (
+                                                            <div className="mt-1.5 pt-1.5 border-t border-brand-content/5 flex flex-wrap gap-1">
+                                                                {perms.granted.map((p: any) => (
+                                                                    <span
+                                                                        key={p.key}
+                                                                        title={p.action}
+                                                                        className="px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[8px] font-mono uppercase tracking-wide"
+                                                                    >
+                                                                        {p.category}
+                                                                    </span>
+                                                                ))}
+                                                                {perms.missing.map((p: any) => (
+                                                                    <span
+                                                                        key={p.key}
+                                                                        title={`${p.action}${p.message ? ` — ${p.message}` : ''}`}
+                                                                        className="px-1.5 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded text-[8px] font-mono uppercase tracking-wide"
+                                                                    >
+                                                                        {p.category}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    )}
+
+                                    <div className="flex-1" />
 
                                     <div className="mt-4 pt-4 border-t border-brand-content/5 flex items-center justify-between">
                                         <span className="text-[9px] text-brand-content/40 uppercase tracking-widest">
-                                            Last Sync: {integration.lastSync}
+                                            Last Sync: {mostRecentSync}
                                         </span>
                                         <Button
-                                            variant={integration.status === 'connected' ? 'outline' : 'default'}
+                                            variant={isConnected ? 'outline' : 'default'}
                                             size="sm"
                                             onClick={() => openSetup(integration)}
-                                            className={`h-7 px-3 text-[10px] ${integration.status === 'connected' ? 'border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10' : 'bg-indigo-600 hover:bg-indigo-500 text-brand-content'}`}
+                                            className={`h-7 px-3 text-[10px] ${isConnected ? 'border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10' : 'bg-indigo-600 hover:bg-indigo-500 text-brand-content'}`}
                                         >
-                                            {integration.status === 'connected' ? 'Manage' : 'Connect'}
+                                            {isAwsAccountKind ? (isConnected ? '+ Add Another' : 'Connect') : (isConnected ? 'Manage' : 'Connect')}
                                         </Button>
                                     </div>
                                 </CardContent>
@@ -583,7 +718,7 @@ export default function Integrations() {
                                                 <div className="space-y-1.5">
                                                     <h3 className="text-xs font-bold text-brand-content uppercase tracking-wider flex items-center gap-1.5">
                                                         <Info className="w-3.5 h-3.5 text-indigo-400" />
-                                                        GhostFinOps Kubernetes Agent
+                                                        Marigold FinOps Kubernetes Agent
                                                     </h3>
                                                     <p className="text-[11px] text-brand-content/60 leading-relaxed">
                                                         Deploy a lightweight, secure agent as a DaemonSet inside your Kubernetes clusters to capture sub-second container-level resource consumption and compute waste.
@@ -725,9 +860,10 @@ export default function Integrations() {
                                                                                 "ce:GetReservationUtilization",
                                                                                 "ce:GetSavingsPlansUtilization",
                                                                                 "ce:GetAnomalies",
-                                                                                "ec2:DescribeInstances",
-                                                                                "ec2:DescribeVolumes",
-                                                                                "ec2:DescribeAddresses",
+                                                                                "ec2:Describe*",
+                                                                                "ec2:Get*",
+                                                                                "tag:GetResources",
+                                                                                "sts:GetCallerIdentity",
                                                                                 "rds:DescribeDBInstances",
                                                                                 "lambda:ListFunctions",
                                                                                 "s3:ListAllMyBuckets",
@@ -771,9 +907,10 @@ export default function Integrations() {
         "ce:GetReservationUtilization",
         "ce:GetSavingsPlansUtilization",
         "ce:GetAnomalies",
-        "ec2:DescribeInstances",
-        "ec2:DescribeVolumes",
-        "ec2:DescribeAddresses",
+        "ec2:Describe*",
+        "ec2:Get*",
+        "tag:GetResources",
+        "sts:GetCallerIdentity",
         "rds:DescribeDBInstances",
         "lambda:ListFunctions",
         "s3:ListAllMyBuckets",
@@ -941,7 +1078,7 @@ export default function Integrations() {
         "ec2:Describe*",
         "ec2:Get*",
         "tag:GetResources",
-        "sts:GetCallerIdentity"
+        "sts:GetCallerIdentity",
         "rds:DescribeDBInstances",
         "lambda:ListFunctions",
         "s3:ListAllMyBuckets",
@@ -974,7 +1111,7 @@ export default function Integrations() {
                                                         <span className="text-[9px] font-bold text-brand-content/40 uppercase tracking-widest">Helm CLI Commands</span>
                                                         <button
                                                             type="button"
-                                                            onClick={() => copyToClipboard(`helm repo add ghostfinops https://charts.ghostfinops.com\nhelm install ghost-agent ghostfinops/agent \\\n  --set apiKey=gf_live_${user?.id || '8c12f11f'} \\\n  --namespace ghostfinops --create-namespace`, 'helm_cmds')}
+                                                            onClick={() => copyToClipboard(`helm repo add marigoldfinops https://charts.marigoldfinops.com\nhelm install marigold-agent marigoldfinops/agent \\\n  --set apiKey=mf_live_${user?.id || '8c12f11f'} \\\n  --namespace marigoldfinops --create-namespace`, 'helm_cmds')}
                                                             className="px-2 py-1 hover:bg-brand-content/10 active:scale-95 rounded-md text-brand-content/40 hover:text-brand-content transition-all flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider"
                                                         >
                                                             {copiedField === 'helm_cmds' ? (
@@ -991,10 +1128,10 @@ export default function Integrations() {
                                                         </button>
                                                     </div>
                                                     <pre className="bg-black border border-brand-content/10 rounded-lg p-3 text-[11px] font-mono text-emerald-400 overflow-x-auto max-h-[160px]">
-                                                        <code>{`helm repo add ghostfinops https://charts.ghostfinops.com
-helm install ghost-agent ghostfinops/agent \\
-  --set apiKey=gf_live_${user?.id || '8c12f11f'} \\
-  --namespace ghostfinops --create-namespace`}</code>
+                                                        <code>{`helm repo add marigoldfinops https://charts.marigoldfinops.com
+helm install marigold-agent marigoldfinops/agent \\
+  --set apiKey=mf_live_${user?.id || '8c12f11f'} \\
+  --namespace marigoldfinops --create-namespace`}</code>
                                                     </pre>
                                                     <div className="p-2.5 bg-amber-500/5 border border-amber-500/10 rounded-lg text-[10px] text-amber-400 flex items-start gap-2">
                                                         <Terminal className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -1173,10 +1310,16 @@ helm install ghost-agent ghostfinops/agent \\
                                                                 <span>{accountIdError}</span>
                                                             </div>
                                                         )}
-                                                        {!accountIdError && isAccountIdValid && (
+                                                        {!accountIdError && isAccountIdValid && !isDuplicateAccountConflict && (
                                                             <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-semibold mt-1">
                                                                 <Check className="w-3.5 h-3.5 shrink-0" />
                                                                 <span>AWS Account ID meets exact length specifications.</span>
+                                                            </div>
+                                                        )}
+                                                        {isDuplicateAccountConflict && (
+                                                            <div className="flex items-center gap-1.5 text-[10px] text-red-400 font-semibold mt-1">
+                                                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                                                <span>This AWS account is already configured with {duplicateAccountLabel}. Delete that connection first if you want to switch how it's connected.</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1309,8 +1452,14 @@ helm install ghost-agent ghostfinops/agent \\
                                                                 }}
                                                                 placeholder={field.placeholder}
                                                                 className="w-full bg-black/50 border border-brand-content/10 rounded-lg px-3 py-2 text-xs text-brand-content focus:outline-none focus:border-indigo-500/50"
-                                                                required
+                                                                required={field.name !== 'accountId' && field.name !== 'userArn'}
                                                             />
+                                                        )}
+                                                        {field.name === 'accountId' && isDuplicateAccountConflict && (
+                                                            <div className="flex items-center gap-1.5 text-[10px] text-red-400 font-semibold mt-1">
+                                                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                                                <span>This AWS account is already configured with {duplicateAccountLabel}. Delete that connection first if you want to switch how it's connected.</span>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 ))
@@ -1373,6 +1522,18 @@ helm install ghost-agent ghostfinops/agent \\
                                                                     <span className="text-brand-content/40">ACCOUNT TYPE:</span>
                                                                     <span className="text-amber-400 font-bold uppercase">{testDetails.accountType || 'External'}</span>
                                                                 </div>
+                                                                {testDetails.resolvedAccountId && (
+                                                                    <div className="flex justify-between">
+                                                                        <span className="text-brand-content/40">AWS ACCOUNT:</span>
+                                                                        <span className="text-indigo-300">{testDetails.resolvedAccountId}</span>
+                                                                    </div>
+                                                                )}
+                                                                {testDetails.isRotation && (
+                                                                    <div className="flex items-start gap-1.5 text-amber-400 pt-1.5 border-t border-brand-content/5">
+                                                                        <Info className="w-3 h-3 shrink-0 mt-0.5" />
+                                                                        <span className="font-sans">This account is already connected. Clicking Connect will update its stored credentials rather than add a new one.</span>
+                                                                    </div>
+                                                                )}
                                                                 {testDetails.permissionsDetected && (
                                                                     <div className="space-y-1 pt-1.5 border-t border-brand-content/5">
                                                                         <span className="text-brand-content/40 block">DETECTED GRANTED PERMISSIONS:</span>

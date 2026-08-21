@@ -9,7 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 export default function Copilot() {
     const [input, setInput] = useState('');
     const [messages, setMessages] = useState([
-        { role: 'assistant', text: "I am GhostFinOps AI. I can analyze your infrastructure, explain cost anomalies, and generate SQL queries for deeper insights. How can I help?" }
+        { role: 'assistant', text: "I am Marigold FinOps AI. I can analyze your infrastructure, explain cost anomalies, and generate SQL queries for deeper insights. How can I help?" }
     ]);
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);

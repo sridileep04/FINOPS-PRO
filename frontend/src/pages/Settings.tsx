@@ -612,7 +612,7 @@ export default function Settings() {
         setTimeout(() => setCopiedText(false), 2000);
     };
 
-    const daemonInstallCode = `curl -sSfL https://agent.ghostfinops.com/install.sh | sh -s -- \\
+    const daemonInstallCode = `curl -sSfL https://agent.marigoldfinops.com/install.sh | sh -s -- \\
   --token="${token?.substring(0, 20)}..." \\
   --org-id="aetherfin-org-01" \\
   --mode="sample-and-push"`;
@@ -793,7 +793,7 @@ export default function Settings() {
                                                     value={profileEmail}
                                                     onChange={(e) => setProfileEmail(e.target.value)}
                                                     className="w-full bg-brand-content/[0.02] border border-brand-content/10 rounded-lg py-2 pl-9 pr-4 text-xs text-brand-content placeholder-white/20 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                                    placeholder="your-name@ghostfinops.com"
+                                                    placeholder="your-name@finops.com"
                                                 />
                                             </div>
                                         </div>
@@ -1364,7 +1364,7 @@ export default function Settings() {
                                                     value={teamForm.email}
                                                     onChange={(e) => setTeamForm({ ...teamForm, email: e.target.value })}
                                                     className="w-full bg-brand-content/[0.02] border border-brand-content/10 rounded-lg py-1.5 px-3 text-xs text-brand-content focus:outline-none"
-                                                    placeholder="user@ghostfinops.com"
+                                                    placeholder="user@marigoldfinops.com"
                                                 />
                                             </div>
 
@@ -1532,7 +1532,7 @@ export default function Settings() {
                                                         type="email"
                                                         value={newAlertEmailInput}
                                                         onChange={(e) => setNewAlertEmailInput(e.target.value)}
-                                                        placeholder="alert-ops@ghostfinops.com"
+                                                        placeholder="alert-ops@marigoldfinops.com"
                                                         className="bg-brand-content/[0.02] border border-brand-content/10 rounded-lg py-1.5 px-3 text-xs text-brand-content flex-1 focus:outline-none focus:border-indigo-500"
                                                     />
                                                     <Button onClick={handleAddAlertEmail} className="h-9 text-xs px-3">Add</Button>

@@ -11,7 +11,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -90,8 +90,34 @@ class Integration(Base):
     customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
     integration_key: Mapped[str] = mapped_column(String(64), nullable=False)  # e.g. "aws_role"
 
+    # AWS role/key integrations can have many rows per (customer,
+    # integration_key) -- one "template" row (aws_account_id IS NULL,
+    # always status=not_connected, the perpetual "+ Connect" card) plus
+    # one row per distinct AWS account the customer has actually
+    # connected. Every other provider (gcp/azure/agent) has no concept
+    # of "multiple accounts" here yet, so it stays a true singleton: at
+    # most one row per (customer, integration_key), full stop.
+    #
+    # Both rules are expressed as partial unique indexes rather than a
+    # single table-wide UniqueConstraint:
+    #   - non-AWS-account keys: unique on (customer_id, integration_key)
+    #   - AWS-account keys: unique on (customer_id, integration_key)
+    #     ONLY among rows where aws_account_id IS NULL, i.e. there can
+    #     only ever be one template row per key, but unlimited connected
+    #     (aws_account_id IS NOT NULL) rows.
     __table_args__ = (
-        UniqueConstraint('customer_id', 'integration_key', name='uq_customer_integration_key'),
+        Index(
+            "uq_integration_singleton_provider",
+            "customer_id", "integration_key",
+            unique=True,
+            postgresql_where=text("integration_key NOT IN ('aws_role', 'aws_keys')"),
+        ),
+        Index(
+            "uq_integration_aws_template",
+            "customer_id", "integration_key",
+            unique=True,
+            postgresql_where=text("integration_key IN ('aws_role', 'aws_keys') AND aws_account_id IS NULL"),
+        ),
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     provider: Mapped[str] = mapped_column(String(32), nullable=False)  # aws | gcp | azure | agent

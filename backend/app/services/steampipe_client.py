@@ -105,3 +105,24 @@ async def validate_account(account: AwsAccount) -> tuple[bool, str]:
     except SteampipeError as exc:
         logger.error("validate_account for account %s failed with error: %s", account.id, str(exc))
         return False, str(exc)
+
+
+async def resolve_account_id(account: AwsAccount) -> str | None:
+    """Returns the *real* 12-digit AWS account number these credentials
+    belong to, straight from STS -- independent of whatever the customer
+    may or may not have typed into an "AWS Account ID" form field.
+
+    This matters because that field is optional/free-text on the
+    frontend: two different real accounts left blank would otherwise
+    both resolve to the same placeholder value and be indistinguishable
+    for duplicate-connection detection (see integrations.py's AWS
+    connect flow). Only call this after validate_account has already
+    confirmed the credentials work.
+    """
+    try:
+        rows = await run_query(account, "select account_id from aws_sts_caller_identity")
+    except SteampipeError:
+        return None
+    if not rows:
+        return None
+    return rows[0].get("account_id")

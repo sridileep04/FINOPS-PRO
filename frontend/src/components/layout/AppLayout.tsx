@@ -321,7 +321,7 @@ export function AppLayout() {
                         <div className="w-5 h-5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-md flex items-center justify-center">
                             <div className="w-1.5 h-1.5 bg-brand-content rounded-full"></div>
                         </div>
-                        GHOST <span className="text-indigo-400">FINOPS</span>
+                        MARIGOLD <span className="text-indigo-400">FINOPS</span>
                     </div>
                 </div>
 

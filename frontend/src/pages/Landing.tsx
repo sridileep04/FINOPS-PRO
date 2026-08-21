@@ -115,7 +115,7 @@ export default function Landing() {
                     <div className="h-8 w-8 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
                         <Zap className="h-5 w-5 text-indigo-400" />
                     </div>
-                    GhostFinOps
+                    Marigold FinOps
                 </div>
                 <div className="flex items-center gap-6">
                     <button
@@ -256,7 +256,7 @@ export default function Landing() {
                             </span>
                             <h2 className="text-3xl font-bold tracking-tight text-brand-content">How much is currently wasted?</h2>
                             <p className="text-sm text-slate-400 leading-relaxed max-w-xl">
-                                Most hyper-growth companies run 20% to 35% higher cloud infrastructure expenditures than necessary. Drag the slider to compute your custom ROI projections with GhostFinOps.
+                                Most hyper-growth companies run 20% to 35% higher cloud infrastructure expenditures than necessary. Drag the slider to compute your custom ROI projections with Marigold FinOps.
                             </p>
 
                             {/* Slider Input */}

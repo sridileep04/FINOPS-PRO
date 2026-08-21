@@ -73,7 +73,7 @@ export default function Signup() {
                         <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-md flex items-center justify-center">
                             <Zap className="h-5 w-5 text-brand-content" />
                         </div>
-                        GHOST <span className="text-indigo-400">FINOPS</span>
+                        MARIGOLD <span className="text-indigo-400">FINOPS</span>
                     </Link>
                 </div>
 
