@@ -23,7 +23,8 @@ import {
     ChevronRight,
     ChevronLeft,
     Info,
-    ExternalLink
+    ExternalLink,
+    Pencil
 } from 'lucide-react';
 
 const INTEGRATION_TYPES = [
@@ -77,6 +78,11 @@ export default function Integrations() {
     const [testSuccess, setTestSuccess] = useState<boolean | null>(null);
     const [testError, setTestError] = useState<string | null>(null);
     const [testDetails, setTestDetails] = useState<any | null>(null);
+    // When set, the wizard is editing this specific already-connected
+    // AWS connection (PATCH /connections/{id}) instead of adding a new
+    // one from the template card (POST /connect). `null` = add mode.
+    const [editingConnection, setEditingConnection] = useState<any | null>(null);
+    const [conflictSuggestion, setConflictSuggestion] = useState<{ connectionId: string; methodLabel: string; awsAccountNumber: string } | null>(null);
 
     const externalId = user ? `aetherfin_ext_${user.id || '8c12f11f'}` : 'aetherfin_ext_8c12f11f';
     const aetherfinAwsAccountId = '236782813401';
@@ -105,28 +111,38 @@ export default function Integrations() {
     const AWS_ACCOUNT_INTEGRATION_IDS = ['aws_role', 'aws_keys'];
 
     // Every already-connected AWS account number for this customer,
-    // mapped to which method (aws_role/aws_keys) it's connected under.
-    // Used to warn the customer the moment they type in an account ID
-    // that's already configured, instead of only finding out after
-    // Test/Connect round-trips to the backend.
+    // mapped to which connection (method + connectionId) it's connected
+    // under. Used to warn the customer the moment they type in an
+    // account ID that's already configured, instead of only finding out
+    // after Test/Connect round-trips to the backend.
     const connectedAccountMethods = React.useMemo(() => {
-        const map = new Map<string, string>();
+        const map = new Map<string, { method: string; connectionId: string }>();
         integrations.forEach((it) => {
-            if (AWS_ACCOUNT_INTEGRATION_IDS.includes(it.id) && it.awsAccountNumber) {
-                map.set(it.awsAccountNumber, it.id);
+            if (AWS_ACCOUNT_INTEGRATION_IDS.includes(it.id) && it.awsAccountNumber && !it.isTemplate) {
+                map.set(it.awsAccountNumber, { method: it.id, connectionId: it.connectionId });
             }
         });
         return map;
     }, [integrations]);
 
-    const duplicateAccountMethod = (activeSetup && AWS_ACCOUNT_INTEGRATION_IDS.includes(activeSetup.id) && rawAccountId.length > 0)
+    const duplicateAccountEntry = (activeSetup && AWS_ACCOUNT_INTEGRATION_IDS.includes(activeSetup.id) && rawAccountId.length > 0)
         ? connectedAccountMethods.get(rawAccountId) || null
         : null;
-    // Same account + same method = this submission will just update
-    // (rotate) that existing connection's credentials, which is fine.
-    // Same account + the *other* method is the real conflict.
-    const isDuplicateAccountConflict = !!duplicateAccountMethod && duplicateAccountMethod !== activeSetup?.id;
+    // Same connection as the one we're currently editing = not a
+    // conflict, it's just this row being resaved with new credentials.
+    const duplicateAccountMethod = (duplicateAccountEntry && duplicateAccountEntry.connectionId !== editingConnection?.connectionId)
+        ? duplicateAccountEntry.method
+        : null;
+    // Same account + same method (and not the row being edited) = this
+    // submission will just update (rotate) that existing connection's
+    // credentials, which is fine. Same account + the *other* method, or
+    // any account already owned by a different connection while
+    // editing, is the real conflict.
+    const isDuplicateAccountConflict = editingConnection
+        ? !!duplicateAccountMethod
+        : !!duplicateAccountMethod && duplicateAccountMethod !== activeSetup?.id;
     const duplicateAccountLabel = duplicateAccountMethod === 'aws_role' ? 'AWS Cross-Account Role' : 'AWS Access Keys';
+    const duplicateConnectionId = duplicateAccountEntry?.connectionId || null;
 
     const isFormValid = activeSetup?.id === 'aws_role'
         ? (isAccountIdValid && isRoleNameValid && isExternalIdValid && !isDuplicateAccountConflict)
@@ -201,6 +217,8 @@ export default function Integrations() {
 
     const openSetup = (integration: any) => {
         setActiveSetup(integration);
+        setEditingConnection(null);
+        setConflictSuggestion(null);
         // Auto-populate External ID for AWS cross-account role integration
         if (integration.id === 'aws_role') {
             setFormData({
@@ -217,8 +235,54 @@ export default function Integrations() {
         setIsTestingConnection(false);
     };
 
+    // Edits one specific already-connected AWS connection (as opposed
+    // to adding a new one via the template card). Prefills only the
+    // non-secret fields -- secrets (secret access key) are never sent
+    // back to the client masked, so the customer must re-enter them to
+    // rotate credentials; roleArn/account id/role name are safe to
+    // prefill since they aren't in _SENSITIVE_CONFIG_KEYS.
+    const openEditConnection = (template: any, connection: any) => {
+        setActiveSetup(template);
+        setEditingConnection(connection);
+        setConflictSuggestion(null);
+
+        const savedConfig = connection.config || {};
+        if (template.id === 'aws_role') {
+            const roleArn: string = savedConfig.roleArn || '';
+            const match = roleArn.match(/^arn:aws:iam::(\d{12}):role\/(.+)$/);
+            setFormData({
+                externalId,
+                roleArn,
+                accountId: match ? match[1] : (connection.awsAccountNumber || ''),
+                roleName: match ? match[2] : ''
+            });
+        } else {
+            setFormData({
+                accessKeyId: savedConfig.accessKeyId || '',
+                secretAccessKey: '',
+                accountId: connection.awsAccountNumber || '',
+                userArn: savedConfig.userArn || ''
+            });
+        }
+        setSetupStep(1);
+        setTestSuccess(null);
+        setTestError(null);
+        setTestDetails(null);
+        setIsTestingConnection(false);
+    };
+
+    // Jumps straight from a duplicate-account warning into editing the
+    // connection that already owns that AWS account, instead of the
+    // customer having to go find it themselves in the grouped card list.
+    const switchToExistingConnection = (connectionId: string) => {
+        const conn = integrations.find((i) => i.connectionId === connectionId);
+        if (conn) openEditConnection(conn, conn);
+    };
+
     const closeSetup = () => {
         setActiveSetup(null);
+        setEditingConnection(null);
+        setConflictSuggestion(null);
         setFormData({});
         setSetupStep(1);
         setTestSuccess(null);
@@ -233,6 +297,7 @@ export default function Integrations() {
         setTestSuccess(null);
         setTestError(null);
         setTestDetails(null);
+        setConflictSuggestion(null);
 
         try {
             const finalConfig = { ...formData };
@@ -248,7 +313,8 @@ export default function Integrations() {
                 },
                 body: JSON.stringify({
                     integrationId: activeSetup.id,
-                    config: finalConfig
+                    config: finalConfig,
+                    connectionId: editingConnection?.connectionId || null
                 })
             });
 
@@ -261,6 +327,7 @@ export default function Integrations() {
                 } else {
                     setTestSuccess(false);
                     setTestError(data.error || data.message || "Verification failed");
+                    if (data.conflict) setConflictSuggestion(data.conflict);
                     return false;
                 }
             } else {
@@ -301,15 +368,21 @@ export default function Integrations() {
                 finalConfig.roleArn = `arn:aws:iam::${formData.accountId}:role/${formData.roleName}`;
             }
 
-            const res = await fetch('/api/v1/integrations/connect', {
-                method: 'POST',
+            const isEditing = !!editingConnection;
+            const url = isEditing
+                ? `/api/v1/integrations/connections/${editingConnection.connectionId}`
+                : '/api/v1/integrations/connect';
+
+            const res = await fetch(url, {
+                method: isEditing ? 'PATCH' : 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     integrationId: activeSetup.id,
-                    config: finalConfig
+                    config: finalConfig,
+                    connectionId: isEditing ? editingConnection.connectionId : null
                 })
             });
             if (res.ok) {
@@ -323,7 +396,13 @@ export default function Integrations() {
                 let message = 'Failed to save this connection.';
                 try {
                     const body = await res.json();
-                    message = body.detail || message;
+                    const detail = body.detail;
+                    if (detail && typeof detail === 'object') {
+                        message = detail.message || message;
+                        if (detail.conflict) setConflictSuggestion(detail.conflict);
+                    } else if (typeof detail === 'string') {
+                        message = detail;
+                    }
                 } catch {
                     // non-JSON error body, fall back to the default message
                 }
@@ -465,36 +544,52 @@ export default function Integrations() {
                                                                     {conn.status === 'connected' ? `Synced ${conn.lastSync}` : conn.status}
                                                                 </p>
                                                             </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => deleteConnection(conn.connectionId)}
-                                                                title="Remove this connection"
-                                                                className="shrink-0 p-1 rounded-md text-brand-content/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                                            >
-                                                                <X className="w-3 h-3" />
-                                                            </button>
+                                                            <div className="flex items-center gap-0.5 shrink-0">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openEditConnection(integration, conn)}
+                                                                    title="Edit this connection"
+                                                                    className="p-1 rounded-md text-brand-content/30 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors"
+                                                                >
+                                                                    <Pencil className="w-3 h-3" />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => deleteConnection(conn.connectionId)}
+                                                                    title="Remove this connection"
+                                                                    className="p-1 rounded-md text-brand-content/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                                                >
+                                                                    <X className="w-3 h-3" />
+                                                                </button>
+                                                            </div>
                                                         </div>
 
                                                         {perms && (perms.granted.length > 0 || perms.missing.length > 0) && (
-                                                            <div className="mt-1.5 pt-1.5 border-t border-brand-content/5 flex flex-wrap gap-1">
-                                                                {perms.granted.map((p: any) => (
-                                                                    <span
-                                                                        key={p.key}
-                                                                        title={p.action}
-                                                                        className="px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[8px] font-mono uppercase tracking-wide"
-                                                                    >
-                                                                        {p.category}
-                                                                    </span>
-                                                                ))}
-                                                                {perms.missing.map((p: any) => (
-                                                                    <span
-                                                                        key={p.key}
-                                                                        title={`${p.action}${p.message ? ` — ${p.message}` : ''}`}
-                                                                        className="px-1.5 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded text-[8px] font-mono uppercase tracking-wide"
-                                                                    >
-                                                                        {p.category}
-                                                                    </span>
-                                                                ))}
+                                                            <div className="mt-1.5 pt-1.5 border-t border-brand-content/5 space-y-1">
+                                                                <p className="text-[8px] text-brand-content/30 uppercase tracking-widest font-bold">
+                                                                    {perms.granted.length} Permission{perms.granted.length === 1 ? '' : 's'} Approved
+                                                                    {perms.missing.length > 0 ? ` · ${perms.missing.length} Pending Approval` : ''}
+                                                                </p>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {perms.granted.map((p: any) => (
+                                                                        <span
+                                                                            key={p.key}
+                                                                            title={p.action}
+                                                                            className="px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[8px] font-mono uppercase tracking-wide"
+                                                                        >
+                                                                            {p.category}
+                                                                        </span>
+                                                                    ))}
+                                                                    {perms.missing.map((p: any) => (
+                                                                        <span
+                                                                            key={p.key}
+                                                                            title={`${p.action}${p.message ? ` — ${p.message}` : ''}`}
+                                                                            className="px-1.5 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded text-[8px] font-mono uppercase tracking-wide"
+                                                                        >
+                                                                            {p.category}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </li>
@@ -544,7 +639,9 @@ export default function Integrations() {
                                 </div>
                                 <div>
                                     <h2 className="text-sm font-bold text-brand-content leading-tight">
-                                        {activeSetup.id === 'aws_role' ? 'AWS Cross-Account IAM Role Wizard' : `${activeSetup.name} Setup Wizard`}
+                                        {editingConnection
+                                            ? `Edit Connection — ${editingConnection.awsAccountNumber || activeSetup.name}`
+                                            : activeSetup.id === 'aws_role' ? 'AWS Cross-Account IAM Role Wizard' : `${activeSetup.name} Setup Wizard`}
                                     </h2>
                                     <p className="text-[10px] text-brand-content/40 uppercase tracking-widest">{activeSetup.provider}</p>
                                 </div>
@@ -872,6 +969,7 @@ export default function Integrations() {
                                                                                 "organizations:DescribeOrganization",
                                                                                 "organizations:ListAccounts",
                                                                                 "cur:DescribeReportDefinitions",
+                                                                                "cloudwatch:ListMetrics",
                                                                                 "cloudwatch:GetMetricData",
                                                                                 "cloudwatch:GetMetricStatistics",
                                                                                 "pricing:GetProducts"
@@ -921,6 +1019,7 @@ export default function Integrations() {
         "cur:DescribeReportDefinitions",
         "cloudwatch:GetMetricData",
         "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics",
         "pricing:GetProducts"
       ],
       "Resource": "*"
@@ -1040,6 +1139,7 @@ export default function Integrations() {
                                                                             "organizations:DescribeOrganization",
                                                                             "organizations:ListAccounts",
                                                                             "cur:DescribeReportDefinitions",
+                                                                            "cloudwatch:ListMetrics",
                                                                             "cloudwatch:GetMetricData",
                                                                             "cloudwatch:GetMetricStatistics",
                                                                             "pricing:GetProducts"
@@ -1089,6 +1189,7 @@ export default function Integrations() {
         "cur:DescribeReportDefinitions",
         "cloudwatch:GetMetricData",
         "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics",
         "pricing:GetProducts"
       ],
       "Resource": "*"
@@ -1317,9 +1418,20 @@ helm install marigold-agent marigoldfinops/agent \\
                                                             </div>
                                                         )}
                                                         {isDuplicateAccountConflict && (
-                                                            <div className="flex items-center gap-1.5 text-[10px] text-red-400 font-semibold mt-1">
-                                                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                                                                <span>This AWS account is already configured with {duplicateAccountLabel}. Delete that connection first if you want to switch how it's connected.</span>
+                                                            <div className="mt-1 p-2 rounded-lg bg-red-500/5 border border-red-500/10 space-y-1.5">
+                                                                <div className="flex items-center gap-1.5 text-[10px] text-red-400 font-semibold">
+                                                                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                                                    <span>This AWS account is already configured with {duplicateAccountLabel}.</span>
+                                                                </div>
+                                                                {duplicateConnectionId && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => switchToExistingConnection(duplicateConnectionId)}
+                                                                        className="text-[10px] font-bold text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
+                                                                    >
+                                                                        Edit the existing connection instead
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
@@ -1430,6 +1542,9 @@ helm install marigold-agent marigoldfinops/agent \\
                                                     <div key={field.name} className="space-y-1.5">
                                                         <label className="text-[9px] font-extrabold text-brand-content/40 uppercase tracking-widest flex items-center justify-between">
                                                             <span>{field.label}</span>
+                                                            {editingConnection && field.type === 'password' && (
+                                                                <span className="text-[8px] text-amber-400 lowercase tracking-normal">re-enter to rotate</span>
+                                                            )}
                                                         </label>
                                                         {field.type === 'textarea' ? (
                                                             <textarea
@@ -1456,9 +1571,20 @@ helm install marigold-agent marigoldfinops/agent \\
                                                             />
                                                         )}
                                                         {field.name === 'accountId' && isDuplicateAccountConflict && (
-                                                            <div className="flex items-center gap-1.5 text-[10px] text-red-400 font-semibold mt-1">
-                                                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                                                                <span>This AWS account is already configured with {duplicateAccountLabel}. Delete that connection first if you want to switch how it's connected.</span>
+                                                            <div className="mt-1 p-2 rounded-lg bg-red-500/5 border border-red-500/10 space-y-1.5">
+                                                                <div className="flex items-center gap-1.5 text-[10px] text-red-400 font-semibold">
+                                                                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                                                    <span>This AWS account is already configured with {duplicateAccountLabel}.</span>
+                                                                </div>
+                                                                {duplicateConnectionId && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => switchToExistingConnection(duplicateConnectionId)}
+                                                                        className="text-[10px] font-bold text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
+                                                                    >
+                                                                        Edit the existing connection instead
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
@@ -1503,6 +1629,16 @@ helm install marigold-agent marigoldfinops/agent \\
                                                                     ? `Authentication established successfully with ${activeSetup.provider}. Syncing billing metadata parameters.`
                                                                     : testError || `Failed to establish connection. Please check your credentials or IAM trust policy.`}
                                                         </p>
+
+                                                        {!isTestingConnection && !testSuccess && conflictSuggestion && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => switchToExistingConnection(conflictSuggestion.connectionId)}
+                                                                className="text-[10px] font-bold text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
+                                                            >
+                                                                Edit the existing {conflictSuggestion.methodLabel} connection instead
+                                                            </button>
+                                                        )}
 
                                                         {testSuccess && testDetails && (
                                                             <div className="mt-3 pt-3 border-t border-brand-content/5 space-y-2 text-[10px] font-mono text-brand-content/75 bg-black/20 p-2.5 rounded-lg">
@@ -1596,7 +1732,7 @@ helm install marigold-agent marigoldfinops/agent \\
                                         disabled={isConnecting || isTestingConnection || !isFormValid}
                                         className="text-xs h-8 bg-emerald-600 hover:bg-emerald-500 disabled:bg-brand-content/5 disabled:text-brand-content/20 text-brand-content font-bold flex items-center gap-1 px-4 border border-emerald-500/20"
                                     >
-                                        {isConnecting ? 'Finishing Setup...' : isTestingConnection ? 'Testing IAM Trust...' : 'Validate & Establish Connection'}
+                                        {isConnecting ? 'Finishing Setup...' : isTestingConnection ? 'Testing IAM Trust...' : editingConnection ? 'Validate & Save Changes' : 'Validate & Establish Connection'}
                                     </Button>
                                 )}
                             </div>

@@ -141,14 +141,21 @@ async def _get_or_404(db: AsyncSession, user: User, integration_id: str) -> Inte
 
 
 async def _find_aws_connection_by_account_number(
-    db: AsyncSession, customer_id: uuid.UUID, aws_account_number: str
+    db: AsyncSession,
+    customer_id: uuid.UUID,
+    aws_account_number: str,
+    exclude_connection_id: uuid.UUID | None = None,
 ) -> Integration | None:
     """Looks up an existing CONNECTED aws_role/aws_keys row for this
     customer whose underlying AwsAccount has the given 12-digit account
     number -- regardless of which of the two integration_keys it was
     connected under. This is the single source of truth both duplicate
     checks (same account+method again, or same account+other method)
-    are built on."""
+    are built on.
+
+    `exclude_connection_id` lets edit flows check "does some *other*
+    connection already own this AWS account" without the connection
+    being edited always matching itself."""
     stmt = (
         select(Integration)
         .join(AwsAccount, Integration.aws_account_id == AwsAccount.id)
@@ -158,8 +165,31 @@ async def _find_aws_connection_by_account_number(
             AwsAccount.aws_account_id == aws_account_number,
         )
     )
+    if exclude_connection_id is not None:
+        stmt = stmt.where(Integration.id != exclude_connection_id)
     result = await db.execute(stmt)
     return result.scalars().first()
+
+
+def _conflict_detail(existing: Integration, aws_account_number: str) -> dict:
+    """Shared 409/error payload for 'this AWS account is already
+    configured elsewhere' -- structured so the frontend can offer a
+    direct 'use the existing connection' suggestion instead of just
+    showing a string.
+    """
+    method_label = _AWS_METHOD_LABELS.get(existing.integration_key, existing.integration_key)
+    return {
+        "message": (
+            f"AWS account {aws_account_number} is already configured with {method_label}. "
+            "Delete that connection first if you want to switch how it's connected."
+        ),
+        "conflict": {
+            "connectionId": str(existing.id),
+            "integrationKey": existing.integration_key,
+            "methodLabel": method_label,
+            "awsAccountNumber": aws_account_number,
+        },
+    }
 
 
 @router.get("")
@@ -207,7 +237,13 @@ def _build_transient_account_keys(user: User, config: dict) -> AwsAccount:
     )
 
 
-async def _run_real_aws_test(db: AsyncSession, user: User, integration_id: str, config: dict) -> dict:
+async def _run_real_aws_test(
+    db: AsyncSession,
+    user: User,
+    integration_id: str,
+    config: dict,
+    exclude_connection_id: uuid.UUID | None = None,
+) -> dict:
     start = time.monotonic()
     if integration_id == "aws_role":
         if not config.get("roleArn"):
@@ -231,17 +267,21 @@ async def _run_real_aws_test(db: AsyncSession, user: User, integration_id: str, 
     resolved_account_number = await steampipe_client.resolve_account_id(account)
     existing = None
     if resolved_account_number:
-        existing = await _find_aws_connection_by_account_number(db, user.customer_id, resolved_account_number)
+        existing = await _find_aws_connection_by_account_number(
+            db, user.customer_id, resolved_account_number, exclude_connection_id=exclude_connection_id
+        )
 
-    if existing is not None and existing.integration_key != integration_id:
-        return {
-            "status": "error",
-            "error": (
-                f"AWS account {resolved_account_number} is already configured with "
-                f"{_AWS_METHOD_LABELS.get(existing.integration_key, existing.integration_key)}. "
-                "Delete that connection first if you want to switch how it's connected."
-            ),
-        }
+    # When editing a specific connection (exclude_connection_id set), any
+    # match found here is necessarily a *different* row, so it's always a
+    # real conflict. When adding fresh from the template card, a match
+    # under the *same* integration_key just means "this test will update
+    # that row" (handled below via isRotation), not a conflict.
+    is_conflict = existing is not None and (
+        exclude_connection_id is not None or existing.integration_key != integration_id
+    )
+    if is_conflict:
+        detail = _conflict_detail(existing, resolved_account_number)
+        return {"status": "error", "error": detail["message"], "conflict": detail["conflict"]}
 
     report = await asyncio.to_thread(permission_check_service.run_permission_check, account)
     if report.get("overall_status") in ("connection_failed", "no_access"):
@@ -264,7 +304,8 @@ async def _run_real_aws_test(db: AsyncSession, user: User, integration_id: str, 
 @router.post("/test")
 async def test_integration(payload: IntegrationActionRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
     if payload.integrationId in ("aws_role", "aws_keys"):
-        return await _run_real_aws_test(db, user, payload.integrationId, payload.config)
+        exclude_id = uuid.UUID(payload.connectionId) if payload.connectionId else None
+        return await _run_real_aws_test(db, user, payload.integrationId, payload.config, exclude_connection_id=exclude_id)
 
     # No live GCP/Azure/Kubernetes backend exists yet -- return a clearly
     # simulated handshake so the UI flow works end-to-end without
@@ -328,11 +369,7 @@ async def connect_integration(payload: IntegrationActionRequest, db: AsyncSessio
         # show two live connections for one account.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"AWS account {aws_account_number} is already configured with "
-                f"{_AWS_METHOD_LABELS.get(existing.integration_key, existing.integration_key)}. "
-                "Delete that connection first if you want to switch how it's connected."
-            ),
+            detail=_conflict_detail(existing, aws_account_number),
         )
 
     # Either this is the very first time we've seen this account, or
@@ -409,6 +446,104 @@ async def connect_integration(payload: IntegrationActionRequest, db: AsyncSessio
         "message": "Integration reconnected" if is_rotation else "Integration connected",
         "status": "connected",
     }
+
+
+@router.patch("/connections/{connection_id}")
+async def edit_integration_connection(
+    connection_id: uuid.UUID,
+    payload: IntegrationActionRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_admin),
+):
+    """Edits one specific, already-connected aws_role/aws_keys connection
+    in place -- e.g. rotating credentials or pointing it at a different
+    IAM role/user -- without going through the "add a new connection"
+    template flow. The account this connection points at may change
+    (the customer typed a different role/keys), so the same
+    duplicate-account conflict check as /connect applies, just scoped to
+    exclude this row itself.
+
+    Non-AWS (singleton) integrations don't have a distinct per-connection
+    identity to edit -- reconnecting via POST /connect on the template
+    already updates their one row in place, so this endpoint only
+    supports aws_role/aws_keys.
+    """
+    stmt = select(Integration).where(
+        Integration.id == connection_id,
+        Integration.customer_id == user.customer_id,
+    )
+    result = await db.execute(stmt)
+    row = result.scalars().first()
+    if row is None or row.integration_key not in _AWS_ACCOUNT_KEYS or row.aws_account_id is None:
+        raise HTTPException(status_code=404, detail="Integration connection not found")
+
+    integration_id = row.integration_key
+
+    if integration_id == "aws_role":
+        if not payload.config.get("roleArn"):
+            raise HTTPException(status_code=422, detail="roleArn is required (fill in Account ID + Role Name).")
+        transient_account = _build_transient_account(user, payload.config)
+    else:
+        if not payload.config.get("accessKeyId") or not payload.config.get("secretAccessKey"):
+            raise HTTPException(status_code=422, detail="accessKeyId and secretAccessKey are required.")
+        transient_account = _build_transient_account_keys(user, payload.config)
+
+    ok, message = await steampipe_client.validate_account(transient_account)
+    if not ok:
+        raise HTTPException(status_code=422, detail=f"Could not verify these credentials: {message}")
+
+    resolved_account_number = await steampipe_client.resolve_account_id(transient_account)
+    aws_account_number = resolved_account_number or payload.config.get("accountId", "000000000000")
+
+    conflict = await _find_aws_connection_by_account_number(
+        db, user.customer_id, aws_account_number, exclude_connection_id=connection_id
+    )
+    if conflict is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_conflict_detail(conflict, aws_account_number))
+
+    try:
+        if integration_id == "aws_role":
+            account_payload = AwsAccountCreate(
+                account_name=f"{user.email}-{integration_id}",
+                aws_account_id=aws_account_number,
+                auth_method=AuthMethod.CROSS_ACCOUNT_ROLE,
+                role_arn=payload.config.get("roleArn"),
+                external_id=payload.config.get("externalId", ""),
+            )
+        else:
+            account_payload = AwsAccountCreate(
+                account_name=f"{user.email}-{integration_id}",
+                aws_account_id=aws_account_number,
+                auth_method=AuthMethod.ACCESS_KEYS,
+                access_key_id=payload.config.get("accessKeyId"),
+                secret_access_key=payload.config.get("secretAccessKey"),
+            )
+        kwargs = build_account_kwargs(account_payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    result = await db.execute(select(AwsAccount).where(AwsAccount.id == row.aws_account_id))
+    account = result.scalar_one_or_none()
+    if account is None:
+        raise HTTPException(status_code=404, detail="Underlying AWS account record not found")
+
+    for field, value in kwargs.items():
+        setattr(account, field, value)
+
+    account.validation_status = ValidationStatus.VALID
+    account.validation_message = message
+    account.last_validated_at = datetime.now(timezone.utc)
+    report = await asyncio.to_thread(permission_check_service.run_permission_check, account)
+    account.permission_report = report
+    account.permission_checked_at = datetime.now(timezone.utc)
+
+    row.config = {k: v for k, v in payload.config.items()}
+    row.status = IntegrationStatus.CONNECTED
+    row.last_sync = datetime.now(timezone.utc)
+
+    await db.commit()
+
+    return {"message": "Connection updated", "status": "connected"}
 
 
 @router.delete("/connections/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)

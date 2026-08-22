@@ -76,6 +76,11 @@ class FeatureConfigRequest(BaseModel):
 class IntegrationActionRequest(BaseModel):
     integrationId: str
     config: dict = Field(default_factory=dict)
+    # Present only when testing/editing one *specific* existing AWS
+    # connection (as opposed to adding a brand-new one from the
+    # template card). Lets the duplicate-account check exclude the
+    # connection being edited from conflicting with itself.
+    connectionId: str | None = None
 
 
 # --- Copilot --------------------------------------------------------------------

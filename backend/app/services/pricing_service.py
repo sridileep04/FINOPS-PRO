@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.models.bff import PricingCache
 
 HOURS_PER_MONTH = 730
-CACHE_TTL = timedelta(days=7)  # a cached price older than this is treated as "not cached"
+CACHE_TTL = timedelta(days=1)  # a cached price older than this is treated as "not cached"
 
 _RDS_ENGINE_MAP = {
     # steampipe's `engine` attribute -> AWS Pricing API's `databaseEngine`

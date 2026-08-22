@@ -18,12 +18,16 @@ interface CloudEnvironment {
     id: string;
     label: string;
     region: string;
-    provider: 'aws' | 'gcp' | 'azure';
+    provider: 'aws' | 'gcp' | 'azure' | 'other';
     status: 'active' | 'standby' | 'maintenance';
     desc: string;
 }
 
-const environments: CloudEnvironment[] = [
+// Static demo scopes shown only to the sandbox account (which has no
+// real connected integrations of its own to derive scopes from). Real
+// customers get their actual connected accounts instead -- see
+// `availableEnvironments` below.
+const demoEnvironments: CloudEnvironment[] = [
     {
         id: 'aws-prod',
         label: 'AWS: production-main-01',
@@ -131,16 +135,54 @@ export function AppLayout() {
     const [loadingIntegrations, setLoadingIntegrations] = useState(true);
     const isSandboxUser = user?.email === 'sandbox@aetherfin.com';
 
-    const hasAws = isSandboxUser || userIntegrations.some(i => i.provider === 'AWS' && i.status === 'connected');
-    const hasGcp = isSandboxUser || userIntegrations.some(i => i.provider === 'GCP' && i.status === 'connected');
-    const hasAzure = isSandboxUser || userIntegrations.some(i => i.provider === 'Azure' && i.status === 'connected');
+    // Real, per-account cloud scopes derived straight from what's
+    // actually configured on the Integrations page -- one entry per
+    // connected AWS account (aws_role/aws_keys can each have several)
+    // plus one per connected singleton provider (GCP/Azure/CUR/agent).
+    // This replaces the old fixed 3-environment list so the switcher
+    // always matches reality: connect a 2nd AWS account and it shows
+    // up here too, permissions status and all.
+    const AWS_ACCOUNT_KEYS = ['aws_role', 'aws_keys'];
+    const permissionStatusToScope = (overallStatus: string | undefined): 'active' | 'standby' | 'maintenance' => {
+        if (overallStatus === 'full_access') return 'active';
+        if (overallStatus === 'partial_access') return 'standby';
+        return 'maintenance';
+    };
 
-    const availableEnvironments = environments.filter(env => {
-        if (env.provider === 'aws') return hasAws;
-        if (env.provider === 'gcp') return hasGcp;
-        if (env.provider === 'azure') return hasAzure;
-        return false;
-    });
+    const realEnvironments: CloudEnvironment[] = React.useMemo(() => {
+        const scopes: CloudEnvironment[] = [];
+        userIntegrations.forEach((it) => {
+            if (AWS_ACCOUNT_KEYS.includes(it.id)) {
+                if (it.isTemplate || it.status !== 'connected') return;
+                const perms = it.permissions;
+                const granted = perms?.granted?.length || 0;
+                const missing = perms?.missing?.length || 0;
+                scopes.push({
+                    id: it.connectionId,
+                    label: `AWS: ${it.awsAccountNumber || 'Unknown account'}`,
+                    region: it.id === 'aws_role' ? 'Cross-Account Role' : 'Access Keys',
+                    provider: 'aws',
+                    status: perms ? permissionStatusToScope(perms.overallStatus) : 'standby',
+                    desc: perms
+                        ? `${granted} permission${granted === 1 ? '' : 's'} approved${missing > 0 ? `, ${missing} pending approval` : ''}`
+                        : 'Awaiting permission check',
+                });
+            } else if (it.status === 'connected') {
+                const providerLower = (it.provider || '').toLowerCase();
+                scopes.push({
+                    id: it.id,
+                    label: `${it.provider}: ${it.name}`,
+                    region: it.category || 'Connected',
+                    provider: providerLower === 'gcp' ? 'gcp' : providerLower === 'azure' ? 'azure' : providerLower === 'aws' ? 'aws' : 'other',
+                    status: 'active',
+                    desc: it.details || 'Connected data source',
+                });
+            }
+        });
+        return scopes;
+    }, [userIntegrations]);
+
+    const availableEnvironments = isSandboxUser ? demoEnvironments : realEnvironments;
 
     const [selectedEnv, setSelectedEnv] = useState<CloudEnvironment | null>(null);
 
@@ -162,7 +204,8 @@ export function AppLayout() {
         } else {
             setSelectedEnv(null);
         }
-    }, [hasAws, hasGcp, hasAzure]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [availableEnvironments]);
 
     useEffect(() => {
         if (selectedEnv) {
@@ -510,6 +553,7 @@ export function AppLayout() {
                                                                     {env.provider === 'aws' && <Server className="w-3 h-3 text-orange-400 shrink-0" />}
                                                                     {env.provider === 'gcp' && <Cpu className="w-3 h-3 text-blue-400 shrink-0" />}
                                                                     {env.provider === 'azure' && <Database className="w-3 h-3 text-cyan-400 shrink-0" />}
+                                                                    {env.provider === 'other' && <Cloud className="w-3 h-3 text-indigo-400 shrink-0" />}
                                                                     {env.label}
                                                                 </div>
                                                                 <span className={cn(
