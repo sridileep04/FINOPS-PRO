@@ -250,18 +250,20 @@ async def latest_snapshots_for_customer(db: AsyncSession, account_ids: list[uuid
     as_of = as_of or date.today()
     latest_subq = (
         select(
-            ResourceSnapshot.aws_account_id,
             ResourceSnapshot.resource_id,
             func.max(ResourceSnapshot.snapshot_date).label("max_date"),
         )
-        .where(ResourceSnapshot.aws_account_id.in_(account_ids), ResourceSnapshot.snapshot_date <= as_of)
-        .group_by(ResourceSnapshot.aws_account_id, ResourceSnapshot.resource_id)
+        .where(
+            ResourceSnapshot.aws_account_id.in_(account_ids),
+            ResourceSnapshot.snapshot_date <= as_of,
+            ResourceSnapshot.removed_at.is_(None),
+        )
+        .group_by(ResourceSnapshot.resource_id)
         .subquery()
     )
-    stmt = select(ResourceSnapshot).join(
+    stmt = select(ResourceSnapshot).where(ResourceSnapshot.removed_at.is_(None)).join(
         latest_subq,
-        (ResourceSnapshot.aws_account_id == latest_subq.c.aws_account_id)
-        & (ResourceSnapshot.resource_id == latest_subq.c.resource_id)
+        (ResourceSnapshot.resource_id == latest_subq.c.resource_id)
         & (ResourceSnapshot.snapshot_date == latest_subq.c.max_date),
     )
     result = await db.execute(stmt)

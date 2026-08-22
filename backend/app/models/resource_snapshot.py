@@ -36,3 +36,4 @@ class ResourceSnapshot(Base):
     estimated_monthly_cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

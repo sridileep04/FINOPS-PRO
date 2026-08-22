@@ -29,52 +29,67 @@ def _resource_status(resource_type: str, attributes: dict) -> str:
                 return "warning"
     return "healthy"
 
-
 @router.get("")
 async def list_resources(
     search: str | None = Query(None),
     type: str | None = Query(None),
     provider: str | None = Query(None),
     date: date = Query(default_factory=date.today),
+    include_removed: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     account_ids = [a.id for a in accounts]
     snapshots = await bh.latest_snapshots_for_customer(db, account_ids, date)
-
-    if provider and provider != "all" and provider != "AWS":
-        snapshots = []
-    if type and type != "all":
-        snapshots = [s for s in snapshots if s.resource_type == type]
-    if search:
-        needle = search.lower()
-        snapshots = [
-            s for s in snapshots
-            if needle in s.resource_id.lower()
-            or needle in (s.tags or {}).get("Name", "").lower()
-            or needle in (s.attributes.get("name") or "").lower()
-        ]
-
+    
     results = []
     for s in snapshots:
-        monthly = float(s.estimated_monthly_cost_usd) if s.estimated_monthly_cost_usd is not None else 0.0
-        name = (s.tags or {}).get("Name") or s.attributes.get("name") or s.resource_id
+        first_seen = s.resource_created_at or s.snapshot_date  # fallback when AWS doesn't expose creation time (e.g. EIP)
         results.append({
             "id": s.resource_id,
-            "name": name,
+            "name": (s.tags or {}).get("Name") or s.resource_id,
             "provider": "AWS",
             "type": bh.display_resource_type(s.resource_type),
             "region": s.region or "unknown",
+            "lifecycleStatus": "active",
+            "activeSince": (s.resource_created_at or datetime.combine(s.snapshot_date, datetime.min.time())).isoformat(),
+            "tags": s.tags or {},
             "status": _resource_status(s.resource_type, s.attributes or {}),
             "environment": (s.tags or {}).get("Environment") or (s.tags or {}).get("environment") or "unspecified",
-            "mtdCost": round(monthly / 30 * date.day, 2),
-            "estimatedMonthlyCost": round(monthly, 2),
-            "dailyCosts": {date.isoformat(): round(monthly / 30, 2)},
-            "tags": s.tags or {},
+            "estimatedMonthlyCost": float(s.estimated_monthly_cost_usd) if s.estimated_monthly_cost_usd is not None else 0.0,
         })
-    return results
 
+    if include_removed and account_ids:
+        removed = await db.execute(
+            select(ResourceSnapshot).where(
+                ResourceSnapshot.aws_account_id.in_(account_ids),
+                ResourceSnapshot.removed_at.is_not(None),
+            )
+        )
+        for s in removed.scalars().all():
+            first_seen = s.resource_created_at or datetime.combine(s.snapshot_date, datetime.min.time(), tzinfo=timezone.utc)
+            days_active = max((s.removed_at - first_seen).days, 0) + 1
+            monthly = float(s.estimated_monthly_cost_usd) if s.estimated_monthly_cost_usd is not None else 0.0
+            results.append({
+                "id": s.resource_id,
+                "name": (s.tags or {}).get("Name") or s.resource_id,
+                "provider": "AWS",
+                "type": bh.display_resource_type(s.resource_type),
+                "region": s.region or "unknown",
+                "lifecycleStatus": "removed",
+                "activeSince": first_seen.isoformat(),
+                "removedAt": s.removed_at.isoformat(),
+                "daysActive": days_active,
+                "costIncurred": round(monthly / 30 * days_active, 2),
+                "tags": s.tags or {},
+                "status": _resource_status(s.resource_type, s.attributes or {}),
+                "environment": (s.tags or {}).get("Environment") or (s.tags or {}).get("environment") or "unspecified",
+                "mtdCost": round(monthly / 30 * date.day, 2),
+                "estimatedMonthlyCost": round(monthly, 2),
+                "dailyCosts": {date.isoformat(): round(monthly / 30, 2)}
+            })
+    return results
 
 @router.get("/filters")
 async def get_filters(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):

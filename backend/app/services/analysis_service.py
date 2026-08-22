@@ -62,14 +62,20 @@ def _approx_monthly_cost(instance_type: str) -> float | None:
 
 
 def _latest_snapshots(db: Session, aws_account_id, resource_type: str) -> list[ResourceSnapshot]:
-    """Returns each resource's most recent snapshot (handles the case
-    where a resource wasn't seen in today's scan but was recently)."""
+    """Returns the inventory as of the MOST RECENT scan for this
+    resource_type -- i.e. "what exists right now", not "every resource's
+    own last sighting ever". A resource that no longer appears in the
+    latest scan (deleted/released in AWS) must disappear from here."""
     latest_date_subq = (
         select(
             ResourceSnapshot.resource_id,
             func.max(ResourceSnapshot.snapshot_date).label("max_date"),
         )
-        .where(ResourceSnapshot.aws_account_id == aws_account_id, ResourceSnapshot.resource_type == resource_type)
+        .where(
+            ResourceSnapshot.aws_account_id == aws_account_id,
+            ResourceSnapshot.resource_type == resource_type,
+            ResourceSnapshot.removed_at.is_(None),   # <-- add this
+        )
         .group_by(ResourceSnapshot.resource_id)
         .subquery()
     )
@@ -77,8 +83,32 @@ def _latest_snapshots(db: Session, aws_account_id, resource_type: str) -> list[R
         latest_date_subq,
         (ResourceSnapshot.resource_id == latest_date_subq.c.resource_id)
         & (ResourceSnapshot.snapshot_date == latest_date_subq.c.max_date),
-    ).where(ResourceSnapshot.aws_account_id == aws_account_id, ResourceSnapshot.resource_type == resource_type)
+    ).where(
+        ResourceSnapshot.aws_account_id == aws_account_id,
+        ResourceSnapshot.resource_type == resource_type,
+        ResourceSnapshot.removed_at.is_(None),   # <-- add this
+    )
     return list(db.execute(stmt).scalars().all())
+
+
+def _resolve_findings_not_in(
+    db: Session, aws_account_id, finding_type: FindingType, resource_type: str, still_flagged_ids: set[str],
+) -> None:
+    """Auto-closes any OPEN finding of this type/resource_type whose
+    resource either no longer exists (deleted) or no longer qualifies
+    (e.g. an EIP that got attached) -- otherwise findings like 'Unused
+    Elastic IP' stay open forever even after you fix/delete the resource."""
+    stale = db.execute(
+        select(Finding).where(
+            Finding.aws_account_id == aws_account_id,
+            Finding.finding_type == finding_type,
+            Finding.resource_type == resource_type,
+            Finding.status == FindingStatus.OPEN,
+        )
+    ).scalars().all()
+    for f in stale:
+        if f.resource_id not in still_flagged_ids:
+            f.status = FindingStatus.RESOLVED
 
 
 def _upsert_finding(
@@ -172,12 +202,13 @@ def detect_underutilized_ec2(db: Session, customer_id, aws_account_id, lookback_
 
 
 # --- Orphaned / unused resources -----------------------------------------
-
 def detect_orphaned_resources(db: Session, customer_id, aws_account_id) -> list[Finding]:
     findings = []
+    flagged_ebs_ids = set()
 
     for snap in _latest_snapshots(db, aws_account_id, "ebs_volume"):
         if snap.attributes.get("state") == "available":
+            flagged_ebs_ids.add(snap.resource_id)
             size_gb = snap.attributes.get("size_gb")
             findings.append(_upsert_finding(
                 db, customer_id, aws_account_id, FindingType.ORPHANED, snap.resource_id, "ebs_volume",
@@ -185,21 +216,25 @@ def detect_orphaned_resources(db: Session, customer_id, aws_account_id) -> list[
                 title="Unattached EBS volume",
                 description=f"This {size_gb}GB {snap.attributes.get('volume_type')} volume is not attached to any instance.",
                 recommendation="Delete it if no longer needed, or snapshot it first if you might need the data.",
-                estimated_monthly_savings_usd=round(size_gb * 0.08, 2) if size_gb else None,  # ~$0.08/GB-mo gp3 ballpark
+                estimated_monthly_savings_usd=round(size_gb * 0.08, 2) if size_gb else None,
                 details=snap.attributes,
             ))
+    _resolve_findings_not_in(db, aws_account_id, FindingType.ORPHANED, "ebs_volume", flagged_ebs_ids)
 
+    flagged_eip_ids = set()
     for snap in _latest_snapshots(db, aws_account_id, "eip"):
         if not snap.attributes.get("association_id"):
+            flagged_eip_ids.add(snap.resource_id)
             findings.append(_upsert_finding(
                 db, customer_id, aws_account_id, FindingType.ORPHANED, snap.resource_id, "eip",
                 FindingSeverity.LOW,
                 title="Unused Elastic IP",
                 description=f"Elastic IP {snap.attributes.get('public_ip')} is allocated but not associated with any resource.",
                 recommendation="Release this Elastic IP -- AWS charges for unattached EIPs.",
-                estimated_monthly_savings_usd=3.6,  # ~$0.005/hr unattached EIP charge
+                estimated_monthly_savings_usd=3.6,
                 details=snap.attributes,
             ))
+    _resolve_findings_not_in(db, aws_account_id, FindingType.ORPHANED, "eip", flagged_eip_ids)
 
     return findings
 

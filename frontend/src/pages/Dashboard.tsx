@@ -56,15 +56,30 @@ export default function Dashboard() {
         try {
             const res = await fetch('/api/v1/sync/trigger', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
+                const { task_ids } = await res.json();
+                const taskIdParam = (task_ids || []).join(',');
+
+                const waitForScan = async () => {
+                    const deadline = Date.now() + 45000; // don't poll forever
+                    while (Date.now() < deadline) {
+                        const statusRes = await fetch(`/api/v1/sync/status?task_ids=${encodeURIComponent(taskIdParam)}`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (statusRes.ok) {
+                            const { done } = await statusRes.json();
+                            if (done) return;
+                        }
+                        await new Promise(r => setTimeout(r, 2000));
+                    }
+                };
+                if (taskIdParam) await waitForScan();
+
                 setRefreshTrigger(prev => prev + 1);
                 setRefreshSuccess(true);
                 setTimeout(() => setRefreshSuccess(false), 3000);
-                // Broadcast success event
                 window.dispatchEvent(new CustomEvent('aetherfin:sync-success'));
             } else {
                 console.error("Force refresh failed");

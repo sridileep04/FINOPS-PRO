@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.models.bff import AgentEvent
 from app.models.user import User
 from app.services import bff_helpers as bh
+from app.tasks.celery_app import celery_app
 from app.tasks.scan_tasks import run_account_scan_task
 
 router = APIRouter(prefix="/sync", tags=["frontend-sync"])
@@ -29,3 +30,13 @@ async def trigger_sync(db: AsyncSession = Depends(get_db), user: User = Depends(
         "message": f"Sync triggered for {len(accounts)} account(s).",
         "task_ids": task_ids,
     }
+
+@router.get("/status")
+async def sync_status(task_ids: str, user: User = Depends(get_current_user)):
+    """task_ids: comma-separated Celery task ids from /sync/trigger. Lets
+    the frontend poll until the background scan(s) actually finish instead
+    of assuming 'queued' means 'done'."""
+    ids = [t for t in task_ids.split(",") if t]
+    states = {tid: celery_app.AsyncResult(tid).status for tid in ids}
+    done = all(s in ("SUCCESS", "FAILURE") for s in states.values()) if states else True
+    return {"done": done, "states": states}

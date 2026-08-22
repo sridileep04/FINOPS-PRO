@@ -1,6 +1,8 @@
 import asyncio
 import logging
 from datetime import date, datetime, timezone
+
+from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.core.request_context import request_id_var
@@ -49,12 +51,13 @@ def _upsert_resource_snapshots(db, account: AwsAccount, scan_run_id, resource_ty
             existing.region = row.get("region")
             existing.resource_created_at = created_at
             existing.estimated_monthly_cost_usd = estimated_cost
+            existing.removed_at = None
         else:
             db.add(ResourceSnapshot(
                 aws_account_id=account.id, scan_run_id=scan_run_id, resource_id=resource_id,
                 resource_type=resource_type, region=row.get("region"), snapshot_date=today,
                 resource_created_at=created_at, tags=tags, attributes=attributes,
-                estimated_monthly_cost_usd=estimated_cost,
+                estimated_monthly_cost_usd=estimated_cost, removed_at=None,
             ))
         count += 1
     return count
@@ -138,6 +141,8 @@ def run_account_scan_task(self, aws_account_id: str):
             resources_scanned = 0
             for resource_type, rows in data.inventory.items():
                 resources_scanned += _upsert_resource_snapshots(db, account, scan_run.id, resource_type, rows, today)
+                current_ids = {r.get("resource_id") for r in rows if r.get("resource_id")}
+                _sync_removed_state(db, account, resource_type, current_ids, today)
             _upsert_metric_samples(db, account, data.cpu_metrics)
             _upsert_daily_costs(db, account, data.daily_costs)
             db.commit()
@@ -151,11 +156,13 @@ def run_account_scan_task(self, aws_account_id: str):
 
             analysis_service.run_all_analyses(db, account.customer_id, account.id)
         except Exception as exc:  # noqa: BLE001
+            db.rollback() 
             logger.exception("Scan failed for account %s", aws_account_id)
             scan_run.status = ScanStatus.FAILED
             scan_run.error_message = str(exc)[:4000]
             scan_run.completed_at = datetime.now(timezone.utc)
             db.commit()
+            raise
     finally:
         db.close()
         request_id_var.reset(token)
@@ -174,3 +181,29 @@ def run_all_accounts_scan_task():
         return len(account_ids)
     finally:
         db.close()
+
+def _sync_removed_state(db: Session, account, resource_type: str, current_ids: set[str], today: date) -> None:
+    """Anything of this resource_type that was known before today but
+    isn't in today's scan results is gone from AWS -- stamp removed_at
+    (once) on its most recent row. Also clears removed_at if an id
+    reappears (recreated with the same id)."""
+    prior_ids = {
+        r[0] for r in db.execute(
+            select(ResourceSnapshot.resource_id).where(
+                ResourceSnapshot.aws_account_id == account.id,
+                ResourceSnapshot.resource_type == resource_type,
+                ResourceSnapshot.snapshot_date < today,
+            ).distinct()
+        ).all()
+    }
+    newly_missing = prior_ids - current_ids
+    for resource_id in newly_missing:
+        latest = db.execute(
+            select(ResourceSnapshot).where(
+                ResourceSnapshot.aws_account_id == account.id,
+                ResourceSnapshot.resource_type == resource_type,
+                ResourceSnapshot.resource_id == resource_id,
+            ).order_by(ResourceSnapshot.snapshot_date.desc()).limit(1)
+        ).scalar_one_or_none()
+        if latest and latest.removed_at is None:
+            latest.removed_at = datetime.now(timezone.utc)

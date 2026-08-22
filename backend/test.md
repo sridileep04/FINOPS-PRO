@@ -27,6 +27,9 @@ docker run -d   --name steampipe-service   --restart unless-stopped   -p 8001:80
   ```Edit the env.py file in alembic```
   ```alembic revision --autogenerate -m "initial migration"```
   ```alembic upgrade head```
+  ```alembic stamp 0005```
+  ```alembic current ```
+  ```alembic history --verbose```
 ### verify the tables
 
   ```docker exec -it postgres /bin/bash```

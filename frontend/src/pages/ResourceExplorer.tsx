@@ -22,6 +22,11 @@ interface Resource {
     tags: Record<string, string>;
     impact_metric?: string;
     system_requirements?: string;
+    lifecycleStatus?: 'active' | 'removed';
+    activeSince?: string;
+    removedAt?: string;
+    daysActive?: number;
+    costIncurred?: number;
 }
 
 export default function ResourceExplorer() {
@@ -37,6 +42,7 @@ export default function ResourceExplorer() {
     const [selectedDate, setSelectedDate] = useState(defaultDate);
     const [syncHistory, setSyncHistory] = useState<string[]>([]);
     const [lastSync, setLastSync] = useState<string>('Never');
+    const [showRemoved, setShowRemoved] = useState(false);
 
     useEffect(() => {
         if (!token) return;
@@ -77,6 +83,7 @@ export default function ResourceExplorer() {
         if (filterType !== 'all') params.append('type', filterType);
         if (filterProvider !== 'all') params.append('provider', filterProvider);
         params.append('date', selectedDate);
+        if (showRemoved) params.append('include_removed', 'true');
 
         fetch(`/api/v1/resources?${params.toString()}`, {
             headers: {
@@ -93,7 +100,7 @@ export default function ResourceExplorer() {
                 console.error("Error fetching resources", err);
                 setIsLoading(false);
             });
-    }, [token, searchTerm, filterType, filterProvider, selectedDate]);
+    }, [token, searchTerm, filterType, filterProvider, selectedDate, showRemoved]);
 
     const container = {
         hidden: { opacity: 0 },
@@ -148,7 +155,7 @@ export default function ResourceExplorer() {
     };
 
     const exportToCSV = () => {
-        const headers = ['Resource Name', 'Resource ID', 'Provider', 'Type', 'Region', 'Environment', 'Status', 'Daily Cost', 'Est. Monthly', 'MTD Cost'];
+        const headers = ['Resource Name', 'Resource ID', 'Provider', 'Type', 'Region', 'Environment', 'Status', 'Lifecycle', 'Days Active', 'Cost Incurred', 'Daily Cost', 'Est. Monthly', 'MTD Cost'];
         const rows = resources.map(r => [
             r.name,
             r.id,
@@ -157,6 +164,9 @@ export default function ResourceExplorer() {
             r.region,
             r.environment || 'N/A',
             r.status,
+            r.lifecycleStatus === 'removed' ? 'Removed' : 'Active',
+            r.daysActive !== undefined ? String(r.daysActive) : 'N/A',
+            r.costIncurred !== undefined ? r.costIncurred.toFixed(2) : 'N/A',
             r.dailyCosts && r.dailyCosts[selectedDate] !== undefined ? r.dailyCosts[selectedDate].toFixed(2) : 'N/A',
             (r.estimatedMonthlyCost || 0).toFixed(2),
             (r.mtdCost || 0).toFixed(2)
@@ -185,7 +195,7 @@ export default function ResourceExplorer() {
         doc.setFontSize(10);
         doc.text(`Date: ${selectedDate}`, 14, 22);
 
-        const headers = [['Resource Name', 'Provider', 'Type', 'Region', 'Env', 'Status', 'Daily Cost', 'Est. Monthly', 'MTD Cost']];
+        const headers = [['Resource Name', 'Provider', 'Type', 'Region', 'Env', 'Status', 'Lifecycle', 'Daily Cost', 'Est. Monthly', 'MTD Cost']];
         const data = resources.map(r => [
             r.name,
             r.provider || 'N/A',
@@ -193,6 +203,7 @@ export default function ResourceExplorer() {
             r.region,
             r.environment || 'N/A',
             r.status,
+            r.lifecycleStatus === 'removed' ? `Removed (${r.daysActive ?? '?'}d, $${(r.costIncurred ?? 0).toFixed(2)})` : 'Active',
             r.dailyCosts && r.dailyCosts[selectedDate] !== undefined ? `$${r.dailyCosts[selectedDate].toFixed(2)}` : 'N/A',
             `$${(r.estimatedMonthlyCost || 0).toFixed(2)}`,
             `$${(r.mtdCost || 0).toFixed(2)}`
@@ -297,6 +308,15 @@ export default function ResourceExplorer() {
                             ))}
                         </select>
                     </div>
+                    <label className="flex items-center gap-2 text-xs text-brand-content/60 cursor-pointer whitespace-nowrap px-2">
+                        <input
+                            type="checkbox"
+                            checked={showRemoved}
+                            onChange={(e) => setShowRemoved(e.target.checked)}
+                            className="rounded border-brand-content/20"
+                        />
+                        Show removed
+                    </label>
                     <div className="flex items-center gap-2 pl-2 border-l border-brand-content/10">
                         <button
                             onClick={exportToCSV}
@@ -337,6 +357,14 @@ export default function ResourceExplorer() {
                                 <th className="px-6 py-4 text-[10px] font-bold text-brand-content/40 uppercase tracking-widest">Region</th>
                                 <th className="px-6 py-4 text-[10px] font-bold text-brand-content/40 uppercase tracking-widest">Env</th>
                                 <th className="px-6 py-4 text-[10px] font-bold text-brand-content/40 uppercase tracking-widest">Status</th>
+                                <th className="px-6 py-4 text-[10px] font-bold text-brand-content/40 uppercase tracking-widest">
+                                    <div className="flex items-center gap-1.5">
+                                        Lifecycle
+                                        <Tooltip content="Whether this resource still exists in AWS, and if removed, how long it was active and what it cost while it existed">
+                                            <Info className="w-3 h-3 text-brand-content/30 cursor-help hover:text-brand-content/70 transition-colors" />
+                                        </Tooltip>
+                                    </div>
+                                </th>
                                 <th className="px-6 py-4 text-[10px] font-bold text-brand-content/40 uppercase tracking-widest text-right">
                                     <div className="flex items-center justify-end gap-1.5">
                                         Daily Cost
@@ -381,6 +409,7 @@ export default function ResourceExplorer() {
                                         <td className="px-6 py-4"><div className="h-4 w-16 bg-brand-content/5 animate-pulse rounded" /></td>
                                         <td className="px-6 py-4"><div className="h-4 w-20 bg-brand-content/5 animate-pulse rounded" /></td>
                                         <td className="px-6 py-4"><div className="h-6 w-20 bg-brand-content/5 animate-pulse rounded-full" /></td>
+                                        <td className="px-6 py-4"><div className="h-6 w-20 bg-brand-content/5 animate-pulse rounded-full" /></td>
                                         <td className="px-6 py-4 text-right"><div className="h-4 w-16 bg-brand-content/5 animate-pulse rounded ml-auto" /></td>
                                         <td className="px-6 py-4 text-right"><div className="h-4 w-16 bg-brand-content/5 animate-pulse rounded ml-auto" /></td>
                                         <td className="px-6 py-4 text-right"><div className="h-4 w-16 bg-brand-content/5 animate-pulse rounded ml-auto" /></td>
@@ -391,7 +420,7 @@ export default function ResourceExplorer() {
                                     <motion.tr
                                         key={resource.id}
                                         variants={item}
-                                        className="border-b border-brand-content/5 hover:bg-brand-content/5 transition-colors group"
+                                        className={`border-b border-brand-content/5 hover:bg-brand-content/5 transition-colors group ${resource.lifecycleStatus === 'removed' ? 'opacity-60' : ''}`}
                                     >
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center gap-3">
@@ -429,6 +458,27 @@ export default function ResourceExplorer() {
                                                 {resource.status}
                                             </span>
                                         </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {resource.lifecycleStatus === 'removed' ? (
+                                                <div>
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider border bg-slate-500/20 text-slate-400 border-slate-500/20">
+                                                        Removed
+                                                    </span>
+                                                    <div className="text-[10px] text-brand-content/40 mt-1">
+                                                        {resource.daysActive ?? '?'} day{resource.daysActive === 1 ? '' : 's'} active · ${(resource.costIncurred ?? 0).toFixed(2)} incurred
+                                                    </div>
+                                                    {resource.removedAt && (
+                                                        <div className="text-[10px] text-brand-content/30">
+                                                            removed {new Date(resource.removedAt).toLocaleString()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider border bg-emerald-500/20 text-emerald-400 border-emerald-500/20">
+                                                    Active
+                                                </span>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             <div className="text-sm font-medium text-brand-content">
                                                 {resource.dailyCosts && resource.dailyCosts[selectedDate] !== undefined && resource.dailyCosts[selectedDate] !== null ? `$${resource.dailyCosts[selectedDate].toFixed(2)}` : <span className="text-brand-content/30">N/A</span>}
@@ -444,7 +494,7 @@ export default function ResourceExplorer() {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-12 text-center text-brand-content/40 text-sm">
+                                    <td colSpan={10} className="px-6 py-12 text-center text-brand-content/40 text-sm">
                                         No resources found matching your search.
                                     </td>
                                 </tr>
