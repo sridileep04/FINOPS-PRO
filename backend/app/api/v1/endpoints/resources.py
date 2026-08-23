@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.models.resource_snapshot import ResourceSnapshot
 from app.models.user import User
 from app.services import bff_helpers as bh
+from app.services import sandbox_data
 
 router = APIRouter(prefix="/resources", tags=["frontend-resources"])
 
@@ -39,6 +40,19 @@ async def list_resources(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if getattr(user, "is_sandbox", False):
+        rows = sandbox_data.resources()
+        if not include_removed:
+            rows = [r for r in rows if r.get("lifecycleStatus") != "removed"]
+        if search:
+            s = search.lower()
+            rows = [r for r in rows if s in r["name"].lower() or s in r["id"].lower()]
+        if type and type != "all":
+            rows = [r for r in rows if r["type"] == type]
+        if provider and provider != "all":
+            rows = [r for r in rows if r["provider"] == provider]
+        return rows
+
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     account_ids = [a.id for a in accounts]
     snapshots = await bh.latest_snapshots_for_customer(db, account_ids, date)
@@ -93,6 +107,9 @@ async def list_resources(
 
 @router.get("/filters")
 async def get_filters(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return sandbox_data.resource_filters()
+
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     account_ids = [a.id for a in accounts]
     if not account_ids:

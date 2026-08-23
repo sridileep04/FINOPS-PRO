@@ -7,6 +7,19 @@ docker run -d   --name steampipe-service   --restart unless-stopped   -p 8001:80
 ```
  docker run -d   --name postgres   -e POSTGRES_USER=postgresuser   -e POSTGRES_PASSWORD=Password123!   -e POSTGRES_DB=finopsdb   -p 127.0.0.1:5432:5432   -v postgres_data:/var/lib/postgresql/data   --restart unless-stopped   postgres:16-alpine
  ```
+
+ ### Above image Doesn't consists of pgvector extension so use below command to run postgresql
+ ```
+ docker run -d \
+  --name postgres \
+  -e POSTGRES_USER=finopsuser \
+  -e POSTGRES_PASSWORD=Tryhard1! \
+  -e POSTGRES_DB=finopsdb \
+  -p 127.0.0.1:5432:5432 \
+  -v postgres_data:/var/lib/postgresql/data \
+  --restart unless-stopped \
+  pgvector/pgvector:pg16
+``` 
  ### redis
  ```
   docker run -d   --name redis   -p 127.0.0.1:6379:6379   -v redis_data:/data   --restart unless-stopped   redis:7-alpine redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -30,6 +43,7 @@ docker run -d   --name steampipe-service   --restart unless-stopped   -p 8001:80
   ```alembic stamp 0005```
   ```alembic current ```
   ```alembic history --verbose```
+
 ### verify the tables
 
   ```docker exec -it postgres /bin/bash```
@@ -44,6 +58,10 @@ docker run -d   --name steampipe-service   --restart unless-stopped   -p 8001:80
   To query ->```SELECT * FROM users WHERE email ILIKE '%@gmail.com';```
   For extended->```\x```
   To quit->```\q```
+  Verify vector extension is enabled ```docker exec -it postgres psql -U finopsuser -d finopsdb -c "\dx"```
+  Verify the Enum Type and its values ```docker exec -it postgres psql -U finopsuser -d finopsdb -c "\dT+ ai_chunk_source_type_enum"```
+  Describe the ai_knowledge_chunks table structure ```docker exec -it postgres psql -U finopsuser -d finopsdb -c "\d ai_knowledge_chunks"```
+  Verify the HNSW Vector Index was created ```docker exec -it postgres psql -U finopsuser -d finopsdb -c "\di ix_ai_knowledge_chunks_*"```
 
 ### Run celery
   ```celery -A app.tasks.celery_app worker --loglevel=info```

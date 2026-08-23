@@ -139,13 +139,14 @@ export default function Dashboard() {
                     <button
                         id="force-refresh-button"
                         onClick={handleForceRefresh}
-                        disabled={isRefreshing}
+                        disabled={isRefreshing || user?.isSandbox}
+                        title={user?.isSandbox ? "Disabled in the shared sandbox -- this is static mock data" : undefined}
                         className={`px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-all duration-300 ${isRefreshing
                             ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 cursor-not-allowed"
                             : refreshSuccess
                                 ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
                                 : "bg-brand-content/[0.02] hover:bg-brand-content/[0.06] hover:border-brand-content/20 text-brand-content/80 border-brand-content/10 active:scale-[0.98]"
-                            }`}
+                            } ${user?.isSandbox ? "opacity-40 cursor-not-allowed" : ""}`}
                     >
                         <RefreshCw className={`w-3 h-3 ${isRefreshing ? "animate-spin text-indigo-400" : refreshSuccess ? "text-emerald-400" : ""}`} />
                         {isRefreshing ? "Reconciling..." : "Force Refresh"}

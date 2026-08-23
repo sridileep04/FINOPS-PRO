@@ -38,33 +38,29 @@ def _user_out(user: User, token: str) -> dict:
             "email": user.email,
             "name": user.full_name or user.email.split("@")[0],
             "role": "admin" if user.is_customer_admin else "viewer",
+            "isSandbox": False,
         },
     }
 
 
-async def _ensure_sandbox_account(db: AsyncSession) -> User:
-    """The Landing page's 'Try Live Sandbox' button logs straight into this
-    fixed demo account. There's no live AWS account behind it (so the
-    scan-dependent pages will show empty states), but we do seed a little
-    synthetic cost/finding history so the Dashboard isn't completely
-    blank on first look."""
-    result = await db.execute(select(User).where(User.email == SANDBOX_EMAIL))
-    user = result.scalar_one_or_none()
-    if user is not None:
-        return user
-
-    customer = Customer(name="AetherFin Sandbox")
-    db.add(customer)
-    await db.flush()
-
-    user = User(
-        customer_id=customer.id, email=SANDBOX_EMAIL, hashed_password=hash_password(SANDBOX_PASSWORD),
-        full_name="Sandbox Explorer", is_customer_admin=True,
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
+async def _sandbox_login_response() -> dict:
+    """The Landing page's 'Explore Sandbox' button logs into this fixed
+    identity. Nothing is read from or written to the database -- the
+    JWT itself carries a `sandbox: true` claim that every downstream
+    endpoint checks (see app.api.deps.get_current_user), and every
+    sandbox response is served from app.services.sandbox_data's static
+    payloads instead of any real customer/account rows."""
+    token = create_access_token(subject="sandbox", extra_claims={"sandbox": True})
+    return {
+        "token": token,
+        "user": {
+            "id": "sandbox",
+            "email": SANDBOX_EMAIL,
+            "name": "Sandbox Explorer",
+            "role": "admin",
+            "isSandbox": True,
+        },
+    }
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED, dependencies=[Depends(rate_limit_signup)])
@@ -100,9 +96,7 @@ async def signup(payload: FrontendSignupRequest, db: AsyncSession = Depends(get_
 @router.post("/login", dependencies=[Depends(rate_limit_login)])
 async def login(payload: FrontendLoginRequest, db: AsyncSession = Depends(get_db)):
     if payload.email.lower() == SANDBOX_EMAIL and payload.password == SANDBOX_PASSWORD:
-        user = await _ensure_sandbox_account(db)
-        token = create_access_token(subject=str(user.id), extra_claims={"customer_id": str(user.customer_id)})
-        return _user_out(user, token)
+        return await _sandbox_login_response()
 
     await check_login_lockout(payload.email)
 
@@ -117,4 +111,3 @@ async def login(payload: FrontendLoginRequest, db: AsyncSession = Depends(get_db
     await clear_login_failures(payload.email)
     token = create_access_token(subject=str(user.id), extra_claims={"customer_id": str(user.customer_id)})
     return _user_out(user, token)
-

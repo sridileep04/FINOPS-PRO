@@ -99,10 +99,10 @@ export default function Login() {
                                     Sign up
                                 </Link>
                             </div>
-                            <div className="mt-4 pt-4 border-t border-brand-content/5 text-xs text-brand-content/40 text-center">
+                            {/* <div className="mt-4 pt-4 border-t border-brand-content/5 text-xs text-brand-content/40 text-center">
                                 Try: admin@ghostfinops.com / password123<br />
                                 or: viewer@ghostfinops.com / password123
-                            </div>
+                            </div> */}
                         </form>
                     </CardContent>
                 </Card>

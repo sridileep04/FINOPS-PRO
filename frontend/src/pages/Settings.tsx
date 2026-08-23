@@ -123,12 +123,12 @@ export default function Settings() {
     // Team States
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
     const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
-    const [teamForm, setTeamForm] = useState({
-        name: '',
-        email: '',
-        password: 'password123',
-        role: 'viewer'
-    });
+    // const [teamForm, setTeamForm] = useState({
+    //     name: '',
+    //     email: '',
+    //     password: 'password123',
+    //     role: 'viewer'
+    // });
 
     // Platform/Policy States
     const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_active_admin, get_current_user
+from app.api.deps import forbid_sandbox_mutation, get_current_active_admin, get_current_user
 from app.db.session import get_db
 from app.models.aws_account import AuthMethod, AwsAccount, ValidationStatus
 from app.models.bff import Integration, IntegrationStatus
@@ -194,6 +194,17 @@ def _conflict_detail(existing: Integration, aws_account_number: str) -> dict:
 
 @router.get("")
 async def list_integrations(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return [
+            {
+                "id": d["key"], "connectionId": d["key"], "name": d["name"], "provider": d["provider"],
+                "category": d["category"], "status": "disconnected", "details": d["details"],
+                "lastSync": "Never", "config": {}, "isTemplate": True,
+                "awsAccountNumber": None, "permissions": None,
+            }
+            for d in INTEGRATION_DEFS
+        ]
+
     rows = await _seed_if_empty(db, user.customer_id)
 
     aws_ids = [r.aws_account_id for r in rows if r.aws_account_id is not None]
@@ -323,7 +334,7 @@ async def test_integration(payload: IntegrationActionRequest, db: AsyncSession =
 
 
 @router.post("/connect")
-async def connect_integration(payload: IntegrationActionRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def connect_integration(payload: IntegrationActionRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin), _sandbox_check: User = Depends(forbid_sandbox_mutation)):
     template = await _get_or_404(db, user, payload.integrationId)
     stored_config = {k: v for k, v in payload.config.items()}
 
@@ -454,6 +465,7 @@ async def edit_integration_connection(
     payload: IntegrationActionRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_admin),
+    _sandbox_check: User = Depends(forbid_sandbox_mutation),
 ):
     """Edits one specific, already-connected aws_role/aws_keys connection
     in place -- e.g. rotating credentials or pointing it at a different
@@ -551,6 +563,7 @@ async def delete_integration_connection(
     connection_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_admin),
+    _sandbox_check: User = Depends(forbid_sandbox_mutation),
 ):
     """Deletes one specific connection.
 

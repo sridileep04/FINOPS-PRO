@@ -10,6 +10,7 @@ from app.models.bff import AnomalyAcknowledgement
 from app.models.finding import FindingType
 from app.models.user import User
 from app.services import bff_helpers as bh
+from app.services import sandbox_data
 from app.services.settings_service import get_platform_settings, upsert_platform_settings
 
 router = APIRouter(prefix="/dashboard", tags=["frontend-dashboard"])
@@ -17,6 +18,9 @@ router = APIRouter(prefix="/dashboard", tags=["frontend-dashboard"])
 
 @router.get("/summary")
 async def get_summary(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return sandbox_data.summary()
+
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     account_ids = [a.id for a in accounts]
 
@@ -54,6 +58,9 @@ async def get_summary(db: AsyncSession = Depends(get_db), user: User = Depends(g
 
 @router.get("/trend")
 async def get_trend(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return sandbox_data.trend()
+
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     account_ids = [a.id for a in accounts]
     waste_findings = await bh.open_findings(db, user.customer_id, [FindingType.ORPHANED])
@@ -63,6 +70,9 @@ async def get_trend(db: AsyncSession = Depends(get_db), user: User = Depends(get
 
 @router.get("/monthly_trend")
 async def get_monthly_trend(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return sandbox_data.monthly_trend()
+
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     account_ids = [a.id for a in accounts]
     waste_findings = await bh.open_findings(db, user.customer_id, [FindingType.ORPHANED])
@@ -72,6 +82,9 @@ async def get_monthly_trend(db: AsyncSession = Depends(get_db), user: User = Dep
 
 @router.get("/breakdown")
 async def get_breakdown(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return sandbox_data.breakdown()
+
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     account_ids = [a.id for a in accounts]
     spend = await bh.month_to_date_spend(db, account_ids)
@@ -84,6 +97,9 @@ async def get_breakdown(db: AsyncSession = Depends(get_db), user: User = Depends
 
 @router.get("/waste-breakdown")
 async def get_waste_breakdown(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return sandbox_data.waste_breakdown()
+
     findings = await bh.open_findings(
         db, user.customer_id,
         [FindingType.ORPHANED, FindingType.UNDERUTILIZED, FindingType.NIGHT_SHUTDOWN_CANDIDATE],
@@ -97,6 +113,9 @@ async def get_waste_breakdown(db: AsyncSession = Depends(get_db), user: User = D
 
 @router.get("/anomalies")
 async def get_anomalies(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return sandbox_data.anomalies()
+
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     account_ids = [a.id for a in accounts]
     settings_row = await get_platform_settings(db, user.customer_id)
@@ -118,6 +137,9 @@ async def get_anomalies(db: AsyncSession = Depends(get_db), user: User = Depends
 
 @router.post("/anomalies/settings")
 async def set_anomaly_settings(payload: dict, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        raise HTTPException(status_code=403, detail="Settings can't be changed in the shared sandbox.")
+
     sensitivity = payload.get("sensitivity", "high")
     if sensitivity not in ("low", "medium", "high"):
         raise HTTPException(status_code=422, detail="sensitivity must be low, medium, or high")
@@ -129,6 +151,9 @@ async def set_anomaly_settings(payload: dict, db: AsyncSession = Depends(get_db)
 
 @router.post("/anomalies/{anomaly_id}/acknowledge")
 async def acknowledge_anomaly(anomaly_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return {"status": "acknowledged", "id": anomaly_id}
+
     db.add(AnomalyAcknowledgement(customer_id=user.customer_id, anomaly_key=anomaly_id))
     await db.commit()
     return {"status": "acknowledged", "id": anomaly_id}

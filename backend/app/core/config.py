@@ -11,7 +11,7 @@ class Settings(BaseSettings):
   # out of the box in dev/staging; explicitly False by default in prod
   # so nobody ships a well-known default login to real users. Override
   # either way with SEED_DEMO_USERS=true/false in .env.
-  SEED_DEMO_USERS: bool | None = None
+  # SEED_DEMO_USERS: bool | None = None
 
   # --- Database Settings ---
   DB_USER: str
@@ -85,11 +85,11 @@ class Settings(BaseSettings):
   def cors_is_wildcard_in_production(self) -> bool:
     return self.ENVIRONMENT == "production" and self.CORS_ORIGINS == "*"
 
-  @property
-  def should_seed_demo_users(self) -> bool:
-    if self.SEED_DEMO_USERS is not None:
-      return self.SEED_DEMO_USERS
-    return self.ENVIRONMENT != "production"
+  # @property
+  # def should_seed_demo_users(self) -> bool:
+  #   if self.SEED_DEMO_USERS is not None:
+  #     return self.SEED_DEMO_USERS
+  #   return self.ENVIRONMENT != "production"
 
   @model_validator(mode="after")
   def assemble_db_connection(self) -> "Settings":
