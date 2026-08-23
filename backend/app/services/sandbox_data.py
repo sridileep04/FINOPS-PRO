@@ -213,3 +213,69 @@ def resource_filters() -> dict:
         "providers": sorted({r["provider"] for r in rows}),
         "types": sorted({r["type"] for r in rows}),
     }
+
+
+def orphaned_resources() -> list[dict]:
+    return [
+        {
+            "id": "sandbox-orphan-ebs", "name": "old-snapshot-restore", "resource_id": "vol-0123456789abcdef0",
+            "provider": "AWS", "type": "EBS Volume", "region": "us-east-1",
+            "age_days": 45, "monthly_cost": 42.00,
+            "description": "500GB gp3 volume has not been attached to any instance for 45 days.",
+        },
+        {
+            "id": "sandbox-orphan-eip", "name": "eip-unused-034fa21", "resource_id": "eip-unused-034fa21",
+            "provider": "AWS", "type": "Elastic IP", "region": "us-east-1",
+            "age_days": 30, "monthly_cost": 3.60,
+            "description": "This Elastic IP has not been associated with a running instance for 30+ days.",
+        },
+    ]
+
+
+def optimizations() -> list[dict]:
+    return [
+        {
+            "id": "sandbox-opt-ec2", "title": "EC2 instance running at 4% average CPU",
+            "category": "Rightsizing", "severity": "critical", "provider": "AWS",
+            "resource_id": "i-0a1b2c3d4e5f6a7b8", "resource_name": "api-worker-3",
+            "potential_savings": 93.60, "current_cost": 187.20, "optimized_cost": 93.60,
+            "description": "api-worker-3 (m5.xlarge) has averaged 4.2% CPU utilization over the last 14 days.",
+            "action_plan": ["Review the workload's actual CPU/memory needs", "Downsize to m5.large", "Monitor for a week before further changes"],
+            "status": "open", "created_at": "2026-08-01T00:00:00Z",
+        },
+        {
+            "id": "sandbox-opt-ebs", "title": "Unattached EBS volume",
+            "category": "Waste Elimination", "severity": "warning", "provider": "AWS",
+            "resource_id": "vol-0123456789abcdef0", "resource_name": "old-snapshot-restore",
+            "potential_savings": 42.00, "current_cost": 42.00, "optimized_cost": 0.0,
+            "description": "500GB gp3 volume has not been attached to any instance for 45 days.",
+            "action_plan": ["Confirm no snapshot/restore job still needs it", "Take a final snapshot if needed", "Delete the volume"],
+            "status": "open", "created_at": "2026-07-09T00:00:00Z",
+        },
+        {
+            "id": "sandbox-opt-eip", "title": "Unassociated Elastic IP",
+            "category": "Waste Elimination", "severity": "info", "provider": "AWS",
+            "resource_id": "eip-unused-034fa21", "resource_name": "eip-unused-034fa21",
+            "potential_savings": 3.60, "current_cost": 3.60, "optimized_cost": 0.0,
+            "description": "This Elastic IP has not been associated with a running instance for 30+ days.",
+            "action_plan": ["Confirm nothing depends on this address", "Release the Elastic IP"],
+            "status": "open", "created_at": "2026-07-24T00:00:00Z",
+        },
+    ]
+
+
+def terraform_drifts() -> list[dict]:
+    return [
+        {
+            "id": "sandbox-drift-1", "resource_id": "vol-0fedcba987654321", "resource_name": "db-backup-vol",
+            "resource_type": "EBS Volume", "provider": "AWS", "drift_type": "unmanaged",
+            "monthly_cost_impact": 18.50,
+            "details": "No infrastructure-as-code management tag (terraform / managed-by) found on this resource in region us-east-1. It may have been created manually outside your IaC pipeline.",
+        },
+        {
+            "id": "sandbox-drift-2", "resource_id": "i-0f9e8d7c6b5a4321f", "resource_name": "staging-batch-runner",
+            "resource_type": "EC2 Instance", "provider": "AWS", "drift_type": "unmanaged",
+            "monthly_cost_impact": 96.40,
+            "details": "No infrastructure-as-code management tag (terraform / managed-by) found on this resource in region us-west-2. It may have been created manually outside your IaC pipeline.",
+        },
+    ]

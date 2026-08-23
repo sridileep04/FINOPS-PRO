@@ -1,61 +1,65 @@
-from typing import Literal
+"""Chat-completion client for the FinOps agent.
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+Both Groq and OpenRouter speak the same OpenAI-compatible chat API, so
+we use the official `openai` Python SDK for both -- just pointed at a
+different `base_url` and `api_key` depending on AI_SETTINGS.LLM_PROVIDER.
+This is the standard trick for using any "OpenAI-compatible" provider:
+you are not calling OpenAI, you're calling their server with OpenAI's
+wire format.
+"""
+from openai import AsyncOpenAI
+
+from app.ai.config import ai_settings
+
+_client: AsyncOpenAI | None = None
 
 
-class AiSettings(BaseSettings):
-    """Settings for the AI/RAG layer, kept separate from app.core.config.Settings
-    on purpose -- it reads the same `.env` file, so you don't have to touch the
-    existing (already-large) Settings class. Merge them later if you'd rather
-    have one source of truth.
+def get_llm_client() -> AsyncOpenAI:
+    """Returns a cached AsyncOpenAI client configured for whichever
+    provider is selected via LLM_PROVIDER. Call get_chat_model() alongside
+    this to get the model id to pass in `model=`.
     """
+    global _client
+    if _client is not None:
+        return _client
 
-    # --- LLM (chat) provider ---
-    # Both providers expose an OpenAI-compatible /chat/completions endpoint,
-    # so a single client class (see llm_client.py) handles both -- only the
-    # base_url, api_key, and model id change.
-    LLM_PROVIDER: Literal["groq", "openrouter"] = "groq"
+    if ai_settings.LLM_PROVIDER == "groq":
+        if not ai_settings.GROQ_API_KEY:
+            raise RuntimeError("LLM_PROVIDER=groq but GROQ_API_KEY is not set")
+        _client = AsyncOpenAI(api_key=ai_settings.GROQ_API_KEY, base_url=ai_settings.GROQ_BASE_URL)
 
-    GROQ_API_KEY: str | None = None
-    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
-    # llama-3.3-70b-versatile / llama-3.1-8b-instant were deprecated by Groq
-    # in mid-2026. openai/gpt-oss-120b is their current recommended
-    # general-purpose replacement -- check console.groq.com/docs/models for
-    # what's current before you ship.
-    GROQ_MODEL: str = "openai/gpt-oss-120b"
+    elif ai_settings.LLM_PROVIDER == "openrouter":
+        if not ai_settings.OPENROUTER_API_KEY:
+            raise RuntimeError("LLM_PROVIDER=openrouter but OPENROUTER_API_KEY is not set")
+        _client = AsyncOpenAI(
+            api_key=ai_settings.OPENROUTER_API_KEY,
+            base_url=ai_settings.OPENROUTER_BASE_URL,
+            default_headers={
+                "HTTP-Referer": ai_settings.OPENROUTER_SITE_URL,
+                "X-Title": ai_settings.OPENROUTER_APP_NAME,
+            },
+        )
+    else:
+        raise RuntimeError(f"Unknown LLM_PROVIDER: {ai_settings.LLM_PROVIDER}")
 
-    OPENROUTER_API_KEY: str | None = None
-    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
-    OPENROUTER_MODEL: str = "meta-llama/llama-3.1-70b-instruct"
-    # OpenRouter asks you to identify your app via these two optional
-    # headers (used for their leaderboards / rate-limit attribution).
-    OPENROUTER_SITE_URL: str = "https://github.com/your-org/finops-pro"
-    OPENROUTER_APP_NAME: str = "FinOps-Pro"
-
-    LLM_TEMPERATURE: float = 0.2
-    LLM_MAX_TOKENS: int = 1024
-
-    # --- Embeddings ---
-    # IMPORTANT: neither Groq nor OpenRouter currently exposes a general
-    # embeddings endpoint the way OpenAI/Cohere do -- they're chat-completion
-    # proxies. So embeddings are handled by a separate, swappable provider:
-    #   - "local": runs a small model on your own CPU via fastembed, no
-    #     external API key or per-call cost, slightly slower on first call
-    #     (model download) and adds ~300MB to the image.
-    #   - "openai": calls OpenAI's embeddings endpoint directly (needs its
-    #     own OPENAI_API_KEY, separate from your Groq/OpenRouter chat key).
-    EMBEDDING_PROVIDER: Literal["local", "openai"] = "local"
-    EMBEDDING_DIM: int = 768  # must match the migration + model column
-
-    EMBEDDING_MODEL_LOCAL: str = "BAAI/bge-base-en-v1.5"  # 768-dim, fastembed
-
-    OPENAI_API_KEY: str | None = None
-    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
-
-    # --- Retrieval tuning ---
-    SEMANTIC_TOP_K: int = 6
-
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
+    return _client
 
 
-ai_settings = AiSettings()
+def get_chat_model() -> str:
+    return ai_settings.GROQ_MODEL if ai_settings.LLM_PROVIDER == "groq" else ai_settings.OPENROUTER_MODEL
+
+
+async def chat_completion(messages: list[dict], *, json_mode: bool = False) -> str:
+    """Thin wrapper so every node in the graph calls the LLM the same way.
+    `messages` is the standard OpenAI chat format:
+        [{"role": "system", "content": ...}, {"role": "user", "content": ...}]
+    """
+    client = get_llm_client()
+    response = await client.chat.completions.create(
+        model=get_chat_model(),
+        messages=messages,
+        temperature=ai_settings.LLM_TEMPERATURE,
+        max_tokens=ai_settings.LLM_MAX_TOKENS,
+        response_format={"type": "json_object"} if json_mode else None,
+    )
+    return response.choices[0].message.content or ""

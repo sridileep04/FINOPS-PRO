@@ -18,15 +18,25 @@ from app.schemas.bff import (
     TeamRoleUpdateRequest,
 )
 from app.services import bff_helpers as bh
+from app.services import sandbox_data
+from app.services.bff_helpers import DEFAULT_PLATFORM_SETTINGS
 from app.services.settings_service import get_platform_settings, upsert_platform_settings
 
 router = APIRouter(prefix="/settings", tags=["frontend-settings"])
+
+_SANDBOX_BLOCKED = HTTPException(status_code=403, detail="This is a shared read-only sandbox -- settings can't be changed here.")
+
+
+def _is_sandbox(user: User) -> bool:
+    return getattr(user, "is_sandbox", False)
 
 
 # --- Profile -----------------------------------------------------------------
 
 @router.put("/profile")
 async def update_profile(payload: ProfileUpdateRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     if payload.email != user.email:
         existing = await db.execute(select(User).where(User.email == payload.email, User.id != user.id))
         if existing.scalar_one_or_none():
@@ -68,6 +78,8 @@ def _serialize_budget(b: Budget, current_spend: float) -> dict:
 
 @router.get("/budgets")
 async def list_budgets(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if _is_sandbox(user):
+        return sandbox_data.budgets()
     result = await db.execute(select(Budget).where(Budget.customer_id == user.customer_id).order_by(Budget.created_at.desc()))
     current_spend = await _current_month_spend(db, user)
     return [_serialize_budget(b, current_spend) for b in result.scalars().all()]
@@ -75,6 +87,8 @@ async def list_budgets(db: AsyncSession = Depends(get_db), user: User = Depends(
 
 @router.post("/budgets")
 async def create_budget(payload: BudgetRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     budget = Budget(customer_id=user.customer_id, **payload.model_dump())
     db.add(budget)
     await db.commit()
@@ -83,6 +97,8 @@ async def create_budget(payload: BudgetRequest, db: AsyncSession = Depends(get_d
 
 @router.put("/budgets/{budget_id}")
 async def update_budget(budget_id: uuid.UUID, payload: BudgetRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     result = await db.execute(select(Budget).where(Budget.id == budget_id, Budget.customer_id == user.customer_id))
     budget = result.scalar_one_or_none()
     if budget is None:
@@ -95,6 +111,8 @@ async def update_budget(budget_id: uuid.UUID, payload: BudgetRequest, db: AsyncS
 
 @router.delete("/budgets/{budget_id}")
 async def delete_budget(budget_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     result = await db.execute(select(Budget).where(Budget.id == budget_id, Budget.customer_id == user.customer_id))
     budget = result.scalar_one_or_none()
     if budget is None:
@@ -121,12 +139,16 @@ def _serialize_alert(a: AlertRule) -> dict:
 
 @router.get("/alerts")
 async def list_alerts(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if _is_sandbox(user):
+        return sandbox_data.alerts()
     result = await db.execute(select(AlertRule).where(AlertRule.customer_id == user.customer_id).order_by(AlertRule.created_at.desc()))
     return [_serialize_alert(a) for a in result.scalars().all()]
 
 
 @router.post("/alerts")
 async def create_alert(payload: AlertRuleRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     alert = AlertRule(customer_id=user.customer_id, **payload.model_dump())
     db.add(alert)
     await db.commit()
@@ -135,6 +157,8 @@ async def create_alert(payload: AlertRuleRequest, db: AsyncSession = Depends(get
 
 @router.put("/alerts/{alert_id}")
 async def update_alert(alert_id: uuid.UUID, payload: AlertRuleRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     result = await db.execute(select(AlertRule).where(AlertRule.id == alert_id, AlertRule.customer_id == user.customer_id))
     alert = result.scalar_one_or_none()
     if alert is None:
@@ -147,6 +171,8 @@ async def update_alert(alert_id: uuid.UUID, payload: AlertRuleRequest, db: Async
 
 @router.delete("/alerts/{alert_id}")
 async def delete_alert(alert_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     result = await db.execute(select(AlertRule).where(AlertRule.id == alert_id, AlertRule.customer_id == user.customer_id))
     alert = result.scalar_one_or_none()
     if alert is None:
@@ -158,6 +184,8 @@ async def delete_alert(alert_id: uuid.UUID, db: AsyncSession = Depends(get_db), 
 
 @router.post("/alerts/evaluate_anomalies")
 async def evaluate_anomalies(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     settings_row = await get_platform_settings(db, user.customer_id)
     sensitivity = (settings_row.get("anomaly_detection") or {}).get("sensitivity", "high")
@@ -180,12 +208,16 @@ def _serialize_member(u: User) -> dict:
 
 @router.get("/team")
 async def list_team(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if _is_sandbox(user):
+        return sandbox_data.team()
     result = await db.execute(select(User).where(User.customer_id == user.customer_id).order_by(User.created_at.asc()))
     return [_serialize_member(u) for u in result.scalars().all()]
 
 
 @router.post("/team")
 async def invite_team_member(payload: TeamInviteRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -203,6 +235,8 @@ async def invite_team_member(payload: TeamInviteRequest, db: AsyncSession = Depe
 
 @router.put("/team/{member_id}/role")
 async def update_member_role(member_id: uuid.UUID, payload: TeamRoleUpdateRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     if payload.role not in ("admin", "viewer"):
         raise HTTPException(status_code=422, detail="role must be 'admin' or 'viewer'")
     result = await db.execute(select(User).where(User.id == member_id, User.customer_id == user.customer_id))
@@ -218,6 +252,8 @@ async def update_member_role(member_id: uuid.UUID, payload: TeamRoleUpdateReques
 
 @router.delete("/team/{member_id}")
 async def remove_team_member(member_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     if member_id == user.id:
         raise HTTPException(status_code=400, detail="You cannot revoke your own access")
     result = await db.execute(select(User).where(User.id == member_id, User.customer_id == user.customer_id))
@@ -233,6 +269,8 @@ async def remove_team_member(member_id: uuid.UUID, db: AsyncSession = Depends(ge
 
 @router.get("/platform")
 async def get_platform(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if _is_sandbox(user):
+        return DEFAULT_PLATFORM_SETTINGS
     settings = await get_platform_settings(db, user.customer_id)
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     if accounts and not settings["cloud_accounts_configured"].get("aws"):
@@ -242,5 +280,7 @@ async def get_platform(db: AsyncSession = Depends(get_db), user: User = Depends(
 
 @router.post("/platform")
 async def save_platform(payload: PlatformSettingsRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if _is_sandbox(user):
+        raise _SANDBOX_BLOCKED
     await upsert_platform_settings(db, user.customer_id, payload.settings)
     return {"message": "Platform settings saved"}

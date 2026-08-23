@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,8 +9,41 @@ from app.models.finding import FindingType
 from app.models.user import User
 from app.schemas.bff import CopilotChatRequest
 from app.services import bff_helpers as bh
+from app.services import sandbox_data
 
 router = APIRouter(prefix="/copilot", tags=["frontend-copilot"])
+
+
+def _sandbox_finding(resource_type: str, resource_id: str, savings: float) -> SimpleNamespace:
+    return SimpleNamespace(resource_type=resource_type, resource_id=resource_id, estimated_monthly_savings_usd=savings)
+
+
+def _sandbox_context() -> dict:
+    """Same shape _build_context returns, but sourced entirely from
+    sandbox_data instead of the database -- the sandbox Copilot is
+    always rule-based, grounded only in this static mock data, and
+    never calls a real LLM or touches any customer's real account."""
+    s = sandbox_data.summary()
+    days_elapsed = 23  # matches sandbox_data's fixed 30-day pattern's "today" position closely enough for chat copy
+    spend = {
+        "current_spend": s["currentSpend"],
+        "projected_spend": s["projectedSpend"],
+        "days_elapsed": days_elapsed,
+        "days_in_month": 30,
+    }
+    waste_findings = [
+        _sandbox_finding("ebs_volume", "vol-0123456789abcdef0", 42.00),
+        _sandbox_finding("eip", "eip-unused-034fa21", 3.60),
+    ]
+    opt_findings = waste_findings + [_sandbox_finding("ec2_instance", "i-0a1b2c3d4e5f6a7b8", 93.60)]
+    breakdown = sandbox_data.breakdown()["by_category"]
+    return {
+        "accounts": [SimpleNamespace(id="sandbox-account")],
+        "spend": spend,
+        "waste_findings": waste_findings,
+        "opt_findings": opt_findings,
+        "breakdown": breakdown,
+    }
 
 
 async def _build_context(db: AsyncSession, user: User) -> dict:
@@ -36,7 +71,7 @@ def _fmt(n: float) -> str:
 @router.post("/chat")
 async def chat(payload: CopilotChatRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     message = payload.message.lower().strip()
-    ctx = await _build_context(db, user)
+    ctx = _sandbox_context() if getattr(user, "is_sandbox", False) else await _build_context(db, user)
 
     if not ctx["accounts"]:
         return {"reply": "You don't have any connected AWS accounts yet, so I don't have spend data to analyze. Head to **Integrations** to connect one."}

@@ -10,8 +10,14 @@ from app.db.session import get_db
 from app.models.finding import Finding, FindingStatus, FindingType
 from app.models.user import User
 from app.services import bff_helpers as bh
+from app.services import sandbox_data
 
 router = APIRouter(prefix="/orphaned-resources", tags=["frontend-orphaned"])
+
+
+def _sandbox_guard(user: User) -> None:
+    if getattr(user, "is_sandbox", False):
+        raise HTTPException(status_code=403, detail="This is a shared read-only sandbox -- actions can't be applied here.")
 
 
 async def _get_finding(db: AsyncSession, user: User, finding_id: str) -> Finding:
@@ -32,6 +38,9 @@ async def _get_finding(db: AsyncSession, user: User, finding_id: str) -> Finding
 
 @router.get("")
 async def list_orphaned(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return sandbox_data.orphaned_resources()
+
     findings = await bh.open_findings(db, user.customer_id, [FindingType.ORPHANED])
     snapshots = await bh.latest_snapshot_map(db, findings)
     now = datetime.now(timezone.utc)
@@ -56,6 +65,7 @@ async def list_orphaned(db: AsyncSession = Depends(get_db), user: User = Depends
 
 @router.delete("/{finding_id}")
 async def delete_orphaned(finding_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _sandbox_guard(user)
     finding = await _get_finding(db, user, finding_id)
     # "Delete" here means: stop counting this as active waste. We don't
     # take any destructive action against the customer's real AWS
@@ -69,6 +79,7 @@ async def delete_orphaned(finding_id: str, db: AsyncSession = Depends(get_db), u
 
 @router.post("/{finding_id}/remediate")
 async def remediate_orphaned(finding_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _sandbox_guard(user)
     finding = await _get_finding(db, user, finding_id)
     finding.status = FindingStatus.RESOLVED
     await db.commit()

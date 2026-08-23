@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.models.finding import Finding, FindingStatus, FindingType
 from app.models.user import User
 from app.services import bff_helpers as bh
+from app.services import sandbox_data
 
 router = APIRouter(prefix="/optimizations", tags=["frontend-optimizations"])
 
@@ -51,6 +52,12 @@ async def list_optimizations(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if getattr(user, "is_sandbox", False):
+        rows = sandbox_data.optimizations()
+        if status != "all":
+            rows = [r for r in rows if r["status"] == status]
+        return rows
+
     findings = await bh.all_findings(db, user.customer_id, _OPT_TYPES)
     if status != "all" and status in _STATUS_MAP_IN:
         target = _STATUS_MAP_IN[status]
@@ -75,6 +82,8 @@ async def _get_finding(db: AsyncSession, user: User, opt_id: str) -> Finding:
 
 @router.post("/{opt_id}/apply")
 async def apply_optimization(opt_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        raise HTTPException(status_code=403, detail="This is a shared read-only sandbox -- actions can't be applied here.")
     finding = await _get_finding(db, user, opt_id)
     finding.status = FindingStatus.RESOLVED
     await db.commit()
@@ -83,6 +92,8 @@ async def apply_optimization(opt_id: str, db: AsyncSession = Depends(get_db), us
 
 @router.post("/{opt_id}/dismiss")
 async def dismiss_optimization(opt_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        raise HTTPException(status_code=403, detail="This is a shared read-only sandbox -- actions can't be applied here.")
     finding = await _get_finding(db, user, opt_id)
     finding.status = FindingStatus.IGNORED
     await db.commit()
@@ -91,6 +102,8 @@ async def dismiss_optimization(opt_id: str, db: AsyncSession = Depends(get_db), 
 
 @router.post("/{opt_id}/restore")
 async def restore_optimization(opt_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        raise HTTPException(status_code=403, detail="This is a shared read-only sandbox -- actions can't be applied here.")
     finding = await _get_finding(db, user, opt_id)
     finding.status = FindingStatus.OPEN
     await db.commit()

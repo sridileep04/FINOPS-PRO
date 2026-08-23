@@ -14,6 +14,22 @@ from app.services.bff_helpers import DEFAULT_FEATURES
 router = APIRouter(prefix="/features", tags=["frontend-features"])
 
 
+def _sandbox_features() -> list[dict]:
+    return [
+        {
+            "id": f"sandbox-{spec['feature_key']}",
+            "name": spec["name"],
+            "description": spec["description"],
+            "category": spec["category"],
+            "is_enabled": spec.get("is_enabled", True),
+            "config": spec.get("config") or {},
+            "impact_metric": spec.get("impact_metric"),
+            "system_requirements": spec.get("system_requirements"),
+        }
+        for spec in DEFAULT_FEATURES
+    ]
+
+
 async def _seed_if_empty(db: AsyncSession, customer_id: uuid.UUID) -> list[FeatureFlag]:
     result = await db.execute(select(FeatureFlag).where(FeatureFlag.customer_id == customer_id))
     rows = list(result.scalars().all())
@@ -42,6 +58,9 @@ def _serialize(f: FeatureFlag) -> dict:
 
 @router.get("")
 async def list_features(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return _sandbox_features()
+
     rows = await _seed_if_empty(db, user.customer_id)
     return [_serialize(f) for f in rows]
 
@@ -60,6 +79,8 @@ async def _get_feature(db: AsyncSession, user: User, feature_id: str) -> Feature
 
 @router.post("/{feature_id}/toggle")
 async def toggle_feature(feature_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if getattr(user, "is_sandbox", False):
+        raise HTTPException(status_code=403, detail="This is a shared read-only sandbox -- actions can't be applied here.")
     feature = await _get_feature(db, user, feature_id)
     feature.is_enabled = not feature.is_enabled
     await db.commit()
@@ -71,6 +92,8 @@ async def update_feature_config(
     feature_id: str, payload: FeatureConfigRequest, db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_admin),
 ):
+    if getattr(user, "is_sandbox", False):
+        raise HTTPException(status_code=403, detail="This is a shared read-only sandbox -- actions can't be applied here.")
     feature = await _get_feature(db, user, feature_id)
     feature.config = payload.config
     await db.commit()

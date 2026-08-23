@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,7 @@ from app.models.bff import TerraformDriftResolution
 from app.models.resource_snapshot import ResourceSnapshot
 from app.models.user import User
 from app.services import bff_helpers as bh
+from app.services import sandbox_data
 
 router = APIRouter(prefix="/terraform", tags=["frontend-terraform"])
 
@@ -24,6 +25,9 @@ def _looks_iac_managed(tags: dict | None) -> bool:
 
 @router.get("/drifts")
 async def list_drifts(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if getattr(user, "is_sandbox", False):
+        return sandbox_data.terraform_drifts()
+
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     account_ids = [a.id for a in accounts]
     snapshots = await bh.latest_snapshots_for_customer(db, account_ids)
@@ -65,6 +69,8 @@ async def resolve_drift(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if getattr(user, "is_sandbox", False):
+        raise HTTPException(status_code=403, detail="This is a shared read-only sandbox -- actions can't be applied here.")
     db.add(TerraformDriftResolution(customer_id=user.customer_id, resource_key=drift_id, action=action))
     await db.commit()
     return {"status": "resolved", "action": action}
