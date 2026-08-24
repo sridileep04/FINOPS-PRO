@@ -25,15 +25,24 @@ from app.models.user import User
 from app.services import bff_helpers as bh
 
 _INTENT_SYSTEM_PROMPT = """You are the intent classifier for a FinOps assistant.
-Classify the user's question into exactly one of:
+Classify the user's LATEST message into exactly one of:
 - "waste": asking about orphaned/unused/zombie resources
 - "savings": asking about optimization opportunities or how to cut spend
 - "forecast": asking about projected/future spend, month-end bill
 - "anomaly": asking about a cost spike, anomaly, or unexpected charge
 - "general": anything else answerable from overall spend context
 - "needs_clarification": the question is too vague to answer usefully
-  (e.g. it names no account, service, or time period, or it isn't
-  about cloud cost/FinOps at all)
+  even after considering the conversation so far (e.g. it names no
+  account, service, or time period anywhere in this conversation, or
+  isn't about cloud cost/FinOps at all)
+
+You will be shown the recent conversation, oldest first, followed by the
+user's latest message. IMPORTANT: if an earlier assistant turn asked a
+clarifying question (e.g. "which account?") and the latest user message
+is a short, direct answer to it (an account id, a service name, "all",
+a date range, etc.), resolve the two together and classify the combined
+intent -- do NOT return "needs_clarification" again just because the
+latest message alone looks short or ambiguous in isolation.
 
 Respond ONLY with JSON: {"intent": "<one of the above>", "clarification_question": "<question to ask the user, or null>"}
 """
@@ -43,13 +52,14 @@ async def parse_intent_node(state: FinOpsAgentState) -> dict:
     """Node 1: classify what the user actually wants, so downstream nodes
     know which structured queries to run and whether to even proceed.
     """
-    raw = await chat_completion(
-        [
-            {"role": "system", "content": _INTENT_SYSTEM_PROMPT},
-            {"role": "user", "content": state["query"]},
-        ],
-        json_mode=True,
-    )
+    messages = [{"role": "system", "content": _INTENT_SYSTEM_PROMPT}]
+    # Cap at the last 6 turns (3 user + 3 assistant) -- enough to resolve a
+    # short follow-up answer without letting an old, unrelated part of the
+    # conversation quietly bias today's classification.
+    messages.extend(state.get("history", [])[-6:])
+    messages.append({"role": "user", "content": state["query"]})
+
+    raw = await chat_completion(messages, json_mode=True)
     try:
         parsed = json.loads(raw)
         intent = parsed.get("intent", "general")
@@ -141,10 +151,12 @@ async def generate_recommendation_node(state: FinOpsAgentState) -> dict:
         f"Structured data:\n{json.dumps(state['structured_context'], indent=2)}\n\n"
         f"Related passages:\n" + "\n---\n".join(state.get("semantic_chunks") or ["(none found)"])
     )
-    answer = await chat_completion(
-        [
-            {"role": "system", "content": _GENERATION_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Context:\n{context_block}\n\nQuestion: {state['query']}"},
-        ]
-    )
+    messages = [{"role": "system", "content": _GENERATION_SYSTEM_PROMPT}]
+    # Same history the intent classifier saw -- so if the user's latest
+    # message is "all" (answering "what would you like to know?"), the
+    # model can see what "all" was actually replying to.
+    messages.extend(state.get("history", [])[-6:])
+    messages.append({"role": "user", "content": f"Context:\n{context_block}\n\nQuestion: {state['query']}"})
+
+    answer = await chat_completion(messages)
     return {"answer": answer}

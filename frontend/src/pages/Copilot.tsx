@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { BrainCircuit, Send, User, Bot, Code2, CheckCircle2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from '@/context/AuthContext';
+import { isSandboxUser } from '@/utils/sandbox';
 
 export default function Copilot() {
     const [input, setInput] = useState('');
@@ -33,13 +34,30 @@ export default function Copilot() {
         setIsLoading(true);
 
         try {
-            const res = await fetch('/api/v1/copilot/chat', {
+            // The public sandbox demo account has no real AWS data behind
+            // it and shouldn't burn LLM API spend on anonymous traffic --
+            // it stays on the deterministic, rule-based endpoint. Any
+            // actually logged-in customer gets the LangGraph/RAG endpoint.
+            const endpoint = isSandboxUser(user) ? '/api/v1/copilot/chat' : '/api/v1/ai/query';
+
+            // `messages` here is still the state from BEFORE this render's
+            // setMessages call above -- i.e. everything already in the
+            // conversation, not including the message we're sending now.
+            // Without this, the AI endpoint has no memory of earlier turns
+            // and can't resolve a short follow-up like an account id or
+            // "all" against the question it was actually answering.
+            const history = messages.map(m => ({
+                role: m.role === 'assistant' ? 'assistant' : 'user',
+                content: m.text,
+            }));
+
+            const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ message: userMessage })
+                body: JSON.stringify({ message: userMessage, history })
             });
 
             const data = await res.json();

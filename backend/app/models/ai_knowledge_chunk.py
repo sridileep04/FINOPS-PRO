@@ -51,7 +51,18 @@ class AiKnowledgeChunk(Base):
     )
 
     source_type: Mapped[KnowledgeSourceType] = mapped_column(
-        Enum(KnowledgeSourceType, name="ai_chunk_source_type_enum"), nullable=False
+        Enum(
+            KnowledgeSourceType,
+            name="ai_chunk_source_type_enum",
+            # SQLAlchemy binds using each enum member's .name (e.g.
+            # "OPTIMIZATION_RECOMMENDATION") by default -- NOT .value
+            # ("optimization_recommendation"). The 0006 migration created the
+            # Postgres enum type with lowercase .value-style labels, so
+            # without this, every insert fails with
+            # `invalid input value for enum ai_chunk_source_type_enum`.
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=False,
     )
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 

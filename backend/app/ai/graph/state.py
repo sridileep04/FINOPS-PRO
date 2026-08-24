@@ -21,6 +21,10 @@ class FinOpsAgentState(TypedDict, total=False):
     query: str
     customer_id: uuid.UUID
     account_ids: list[uuid.UUID]
+    # Prior turns of this conversation, oldest first: [{"role": "user"|"assistant", "content": "..."}].
+    # Without this, every call is evaluated with zero memory of what was
+    # already asked/answered -- see parse_intent_node's use of it.
+    history: list[dict]
 
     # --- populated by parse_intent_node ---
     intent: Intent
