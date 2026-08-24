@@ -8,12 +8,13 @@ from app.models.user import User
 from app.services import bff_helpers as bh
 from app.tasks.celery_app import celery_app
 from app.tasks.scan_tasks import run_account_scan_task
+from app.api.deps import forbid_sandbox_mutation
 
 router = APIRouter(prefix="/sync", tags=["frontend-sync"])
 
 
 @router.post("/trigger")
-async def trigger_sync(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def trigger_sync(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), _sandbox_check: User = Depends(forbid_sandbox_mutation)):
     accounts = await bh.get_customer_accounts(db, user.customer_id)
     if not accounts:
         raise HTTPException(status_code=400, detail="No AWS accounts connected yet -- add one under Integrations first.")

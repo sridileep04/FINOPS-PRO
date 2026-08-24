@@ -12,11 +12,6 @@ from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-# A single shared, in-memory pseudo-user for the public "Explore Sandbox"
-# demo. It never touches the users/customers tables -- every request
-# carrying a sandbox JWT (see app.api.v1.endpoints.auth) resolves straight
-# to this object, so there is nothing in the database to seed, pollute,
-# or clean up for the sandbox flow.
 SANDBOX_USER = SimpleNamespace(
     id="sandbox",
     customer_id="sandbox",
