@@ -279,3 +279,32 @@ def terraform_drifts() -> list[dict]:
             "details": "No infrastructure-as-code management tag (terraform / managed-by) found on this resource in region us-west-2. It may have been created manually outside your IaC pipeline.",
         },
     ]
+
+def budgets() -> list[dict]:
+    current_spend = summary()["currentSpend"]
+    return [
+        {
+            "id": "sandbox-budget-1", "name": "Production Monthly Budget", "limit_amount": 1200.00,
+            "alert_threshold": 0.8, "current_spend": current_spend,
+            "notification_email": "sandbox@aetherfin.com", "department": "Engineering",
+        },
+    ]
+
+
+def alerts() -> list[dict]:
+    return [
+        {
+            "id": "sandbox-alert-1", "name": "Daily spend spike", "metric": "daily_spend", "threshold": 500.0,
+            "email_enabled": True, "push_enabled": False, "notification_email": "sandbox@aetherfin.com",
+            "created_at": "2026-07-01T00:00:00Z",
+        },
+    ]
+
+
+def team() -> list[dict]:
+    return [
+        {
+            "id": "sandbox", "name": "Sandbox Explorer", "email": "sandbox@aetherfin.com",
+            "role": "admin", "is_active": True, "created_at": "2026-01-01T00:00:00Z",
+        },
+    ]

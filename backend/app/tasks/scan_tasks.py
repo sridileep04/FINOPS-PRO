@@ -1,11 +1,14 @@
 import asyncio
 import logging
+import uuid
 from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
+from app.ai.ingestion import ingest_account_findings
 from app.core.request_context import request_id_var
+from app.db.session import AsyncSessionLocal
 from app.models.aws_account import AwsAccount, ValidationStatus
 from app.models.daily_cost import DailyCost
 from app.models.metric_sample import MetricSample
@@ -18,6 +21,18 @@ from app.tasks.report_tasks import SyncSessionLocal
 from app.services import pricing_service
 
 logger = logging.getLogger(__name__)
+
+
+async def _sync_ai_knowledge_base(aws_account_id: str) -> int:
+    """Async glue so the sync Celery task below can call the async
+    ingestion pipeline -- same pattern already used for
+    `asyncio.run(collect_account_data(account))`. Uses its own AsyncSession
+    (AsyncSessionLocal) rather than the task's sync `db`/SyncSessionLocal,
+    since the async SQLAlchemy engine and the sync one are entirely
+    separate connections/drivers -- they can't share a session.
+    """
+    async with AsyncSessionLocal() as async_db:
+        return await ingest_account_findings(async_db, uuid.UUID(aws_account_id))
 
 
 def _upsert_resource_snapshots(db, account: AwsAccount, scan_run_id, resource_type: str, rows: list[dict], today: date) -> int:
@@ -155,6 +170,18 @@ def run_account_scan_task(self, aws_account_id: str):
             db.commit()
 
             analysis_service.run_all_analyses(db, account.customer_id, account.id)
+
+            # Keep the AI copilot's semantic search current with whatever
+            # findings this scan just produced/resolved. Deliberately its
+            # own try/except, separate from the block below: a Groq/embedding
+            # outage or a knowledge-base hiccup must never flip this scan_run
+            # to FAILED or block the resources/costs/findings data that's
+            # already committed and correct -- this step is best-effort.
+            try:
+                chunks_synced = asyncio.run(_sync_ai_knowledge_base(aws_account_id))
+                logger.info("AI knowledge base synced for account %s (%d findings)", aws_account_id, chunks_synced)
+            except Exception:  # noqa: BLE001
+                logger.exception("AI knowledge base sync failed for account %s (scan itself succeeded)", aws_account_id)
         except Exception as exc:  # noqa: BLE001
             db.rollback() 
             logger.exception("Scan failed for account %s", aws_account_id)

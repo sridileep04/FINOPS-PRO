@@ -46,10 +46,13 @@ async def sync_knowledge_base(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Backfills ai_knowledge_chunks from this customer's currently-open
-    findings. Call this once after connecting an account (or hook it into
-    the nightly scan task) so the semantic-search half of retrieval has
-    something to find. Safe to call repeatedly.
+    """Manual/admin fallback only. The knowledge base now syncs
+    automatically as part of every account scan (see
+    app.tasks.scan_tasks.run_account_scan_task ->
+    app.ai.ingestion.ingest_account_findings) -- nightly via Celery beat,
+    on manual re-scan, and right after connecting a new account. Call
+    this endpoint directly only to force a full customer-wide re-sync
+    without waiting for the next scan (e.g. while debugging).
     """
     count = await ingest_all_open_findings(db, user.customer_id)
     return {"status": "ok", "findings_ingested": count}

@@ -64,6 +64,6 @@ async def forbid_sandbox_mutation(user: User = Depends(get_current_user)) -> Use
     if getattr(user, "is_sandbox", False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This is a shared read-only sandbox with mock data -- sign up for your own account to connect real integrations.",
+            detail="This is a shared public sandbox with mock data -- sign up for your own free account to connect real integrations.",
         )
     return user

@@ -314,10 +314,14 @@ async def _run_real_aws_test(
 
 @router.post("/test")
 async def test_integration(payload: IntegrationActionRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+    if getattr(user, "is_sandbox", False):
+        return {
+            "status": "error",
+            "error": "This is a shared public sandbox with mock data -- integrations can't be connected here. Sign up for your own free account to connect a real AWS environment.",
+        }
     if payload.integrationId in ("aws_role", "aws_keys"):
         exclude_id = uuid.UUID(payload.connectionId) if payload.connectionId else None
         return await _run_real_aws_test(db, user, payload.integrationId, payload.config, exclude_connection_id=exclude_id)
-
     # No live GCP/Azure/Kubernetes backend exists yet -- return a clearly
     # simulated handshake so the UI flow works end-to-end without
     # pretending to have verified credentials we can't actually check.
