@@ -17,6 +17,7 @@ import Dashboard from './pages/Dashboard';
 import Copilot from './pages/Copilot';
 import Integrations from './pages/Integrations';
 import ResourceExplorer from './pages/ResourceExplorer';
+import QueryStudio from './pages/QueryStudio';
 import OrphanedResources from './pages/OrphanedResources';
 import IaCDrift from './pages/IaCDrift';
 import FeaturesControl from './pages/FeaturesControl';
@@ -39,6 +40,7 @@ export default function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/dashboard/integrations" element={<Integrations />} />
                   <Route path="/dashboard/resources" element={<ResourceExplorer />} />
+                  <Route path="/dashboard/query-studio" element={<QueryStudio />} />
                   <Route path="/dashboard/orphaned" element={<OrphanedResources />} />
                   <Route path="/dashboard/iac-drift" element={<IaCDrift />} />
                   <Route path="/dashboard/features" element={<FeaturesControl />} />

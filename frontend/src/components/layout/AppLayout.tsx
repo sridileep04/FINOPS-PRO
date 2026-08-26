@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
     LayoutDashboard, Zap, Activity, BrainCircuit, Settings, LogOut, Cloud, Search,
     Bell, Shield, FileCode2, Sliders, ChevronDown, Check, Copy, User, Lock, Database,
-    Terminal, Globe, Cpu, Server, Layers, AlertCircle, BookOpen, Palette, RefreshCw, AlertTriangle
+    Terminal, Globe, Cpu, Server, Layers, AlertCircle, BookOpen, Palette, RefreshCw, AlertTriangle,
+    Wand2
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/context/AuthContext';
@@ -58,6 +59,7 @@ const navItems = [
     { icon: LayoutDashboard, label: 'Mission Control', path: '/dashboard' },
     { icon: Cloud, label: 'Integrations', path: '/dashboard/integrations' },
     { icon: Activity, label: 'Resource Explorer', path: '/dashboard/resources' },
+    { icon: Wand2, label: 'Query Studio', path: '/dashboard/query-studio' },
     { icon: Search, label: 'Waste Radar', path: '/dashboard/orphaned' },
     { icon: FileCode2, label: 'IaC Intelligence', path: '/dashboard/iac-drift' },
     { icon: Sliders, label: 'Feature Control', path: '/dashboard/features' },
