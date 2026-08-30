@@ -140,6 +140,13 @@ SERVICES: list[ServiceDef] = [
             ColumnDef("vpc_id", "VPC ID", "string"),
             ColumnDef("subnet_id", "Subnet ID", "string"),
             ColumnDef("key_name", "Key Pair", "string"),
+            ColumnDef("image_id", "AMI ID", "string"),
+            ColumnDef("architecture", "Architecture", "string"),
+            ColumnDef("root_device_type", "Root Device Type", "string"),
+            ColumnDef("iam_instance_profile_arn", "IAM Instance Profile", "string"),
+            ColumnDef("instance_lifecycle", "Lifecycle (Spot/On-Demand)", "string"),
+            ColumnDef("monitoring_state", "Detailed Monitoring", "string"),
+            ColumnDef("ebs_optimized", "EBS Optimized", "boolean"),
             ColumnDef("launch_time", "Launched At", "datetime", default=True),
             _TAG_NAME_COL(),
         ],
@@ -162,6 +169,9 @@ SERVICES: list[ServiceDef] = [
             ColumnDef("iops", "IOPS", "number"),
             ColumnDef("state", "State", "string", default=True),
             ColumnDef("encrypted", "Encrypted", "boolean", default=True),
+            ColumnDef("kms_key_id", "KMS Key ID", "string"),
+            ColumnDef("snapshot_id", "Source Snapshot ID", "string"),
+            ColumnDef("throughput", "Throughput (MB/s)", "number"),
             ColumnDef("create_time", "Created At", "datetime"),
             _TAG_NAME_COL(),
         ],
@@ -181,6 +191,18 @@ SERVICES: list[ServiceDef] = [
             ColumnDef("creation_date", "Created At", "datetime"),
             ColumnDef("versioning_enabled", "Versioning Enabled", "boolean", default=True),
             ColumnDef("bucket_policy_is_public", "Publicly Accessible", "boolean", default=True),
+            ColumnDef("block_public_acls", "Blocks Public ACLs", "boolean"),
+            ColumnDef("block_public_policy", "Blocks Public Policies", "boolean"),
+            ColumnDef("ignore_public_acls", "Ignores Public ACLs", "boolean"),
+            ColumnDef("restrict_public_buckets", "Restricts Public Bucket Policies", "boolean"),
+            ColumnDef(
+                "is_encrypted", "Default Encryption Enabled", "boolean",
+                sql_expr="(server_side_encryption_configuration IS NOT NULL)",
+            ),
+            ColumnDef(
+                "access_logging_enabled", "Access Logging Enabled", "boolean",
+                sql_expr="(logging IS NOT NULL)",
+            ),
         ],
     ),
     ServiceDef(
@@ -203,6 +225,10 @@ SERVICES: list[ServiceDef] = [
             ColumnDef("publicly_accessible", "Publicly Accessible", "boolean", default=True),
             ColumnDef("multi_az", "Multi-AZ", "boolean"),
             ColumnDef("storage_encrypted", "Storage Encrypted", "boolean"),
+            ColumnDef("kms_key_id", "KMS Key ID", "string"),
+            ColumnDef("deletion_protection", "Deletion Protection", "boolean"),
+            ColumnDef("performance_insights_enabled", "Performance Insights", "boolean"),
+            ColumnDef("auto_minor_version_upgrade", "Auto Minor Version Upgrade", "boolean"),
             ColumnDef("backup_retention_period", "Backup Retention (days)", "number"),
             ColumnDef("create_time", "Created At", "datetime"),
         ],
@@ -222,6 +248,10 @@ SERVICES: list[ServiceDef] = [
             ColumnDef("table_status", "Status", "string", default=True),
             ColumnDef("item_count", "Item Count", "number", default=True),
             ColumnDef("table_size_bytes", "Size (bytes)", "number"),
+            ColumnDef(
+                "point_in_time_recovery_enabled", "Point-in-Time Recovery", "boolean",
+                sql_expr="((point_in_time_recovery_description ->> 'PointInTimeRecoveryStatus') = 'ENABLED')",
+            ),
             ColumnDef("creation_date_time", "Created At", "datetime"),
         ],
     ),
@@ -242,6 +272,12 @@ SERVICES: list[ServiceDef] = [
             ColumnDef("memory_size", "Memory (MB)", "number", default=True),
             ColumnDef("timeout", "Timeout (s)", "number"),
             ColumnDef("code_size", "Code Size (bytes)", "number"),
+            ColumnDef("vpc_id", "VPC ID", "string"),
+            ColumnDef("kms_key_arn", "KMS Key ARN", "string"),
+            ColumnDef(
+                "is_arm64_graviton", "Runs on Graviton (arm64)", "boolean",
+                sql_expr="(architectures::text ILIKE '%arm64%')",
+            ),
             ColumnDef("last_modified", "Last Modified", "string", default=True),
             _TAG_NAME_COL(),
         ],
@@ -260,8 +296,10 @@ SERVICES: list[ServiceDef] = [
             ColumnDef("public_ip", "Public IP", "string", default=True),
             ColumnDef("domain", "Domain", "string"),
             ColumnDef("association_id", "Association ID", "string", default=True),
+            ColumnDef("instance_id", "Attached Instance ID", "string"),
             ColumnDef("network_interface_id", "Network Interface", "string"),
             ColumnDef("region", "Region", "string", default=True),
+            _TAG_NAME_COL(),
         ],
     ),
     ServiceDef(
@@ -277,6 +315,8 @@ SERVICES: list[ServiceDef] = [
             ColumnDef("vpc_id", "VPC ID", "string", default=True),
             ColumnDef("cidr_block", "CIDR Block", "string", default=True),
             ColumnDef("is_default", "Default VPC", "boolean"),
+            ColumnDef("instance_tenancy", "Instance Tenancy", "string"),
+            ColumnDef("dhcp_options_id", "DHCP Options ID", "string"),
             ColumnDef("state", "State", "string", default=True),
             ColumnDef("region", "Region", "string", default=True),
             _TAG_NAME_COL(),
@@ -308,6 +348,29 @@ SERVICES: list[ServiceDef] = [
                     "WHERE r->>'CidrIp' = '0.0.0.0/0')"
                 ),
             ),
+            ColumnDef(
+                "is_ssh_open_to_internet",
+                "SSH (22) Open to the Internet",
+                "boolean",
+                sql_expr=(
+                    "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(ip_permissions, '[]'::jsonb)) perm, "
+                    "jsonb_array_elements(COALESCE(perm->'IpRanges', '[]'::jsonb)) r "
+                    "WHERE r->>'CidrIp' = '0.0.0.0/0' AND (perm->>'IpProtocol' = '-1' OR "
+                    "((perm->>'FromPort')::int <= 22 AND (perm->>'ToPort')::int >= 22)))"
+                ),
+            ),
+            ColumnDef(
+                "is_rdp_open_to_internet",
+                "RDP (3389) Open to the Internet",
+                "boolean",
+                sql_expr=(
+                    "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(ip_permissions, '[]'::jsonb)) perm, "
+                    "jsonb_array_elements(COALESCE(perm->'IpRanges', '[]'::jsonb)) r "
+                    "WHERE r->>'CidrIp' = '0.0.0.0/0' AND (perm->>'IpProtocol' = '-1' OR "
+                    "((perm->>'FromPort')::int <= 3389 AND (perm->>'ToPort')::int >= 3389)))"
+                ),
+            ),
+            _TAG_NAME_COL(),
         ],
     ),
     ServiceDef(
@@ -324,8 +387,17 @@ SERVICES: list[ServiceDef] = [
             ColumnDef("user_id", "User ID", "string"),
             ColumnDef("path", "Path", "string"),
             ColumnDef("mfa_enabled", "MFA Enabled", "boolean", default=True),
+            ColumnDef(
+                "console_access_enabled", "Console Access Enabled", "boolean",
+                sql_expr="(login_profile IS NOT NULL)",
+            ),
+            ColumnDef(
+                "has_attached_policies", "Has Attached Policies", "boolean",
+                sql_expr="(COALESCE(jsonb_array_length(attached_policy_arns), 0) > 0)",
+            ),
             ColumnDef("password_last_used", "Password Last Used", "datetime", default=True),
             ColumnDef("create_date", "Created At", "datetime"),
+            _TAG_NAME_COL(),
         ],
     ),
 ]

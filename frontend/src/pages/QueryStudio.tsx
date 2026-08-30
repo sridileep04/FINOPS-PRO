@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/ui/Card';
@@ -8,7 +8,7 @@ import {
     PauseCircle, Unlink, Gauge, ShieldAlert, History, AlertTriangle, Cloud,
     ChevronDown, Check, Plus, Trash2, Play, Copy, Download,
     Loader2, Sparkles, Search, ArrowUpDown, ArrowUp, ArrowDown,
-    Terminal, CircleAlert, Info, ListFilter, Rows3,
+    Terminal, CircleAlert, Info, ListFilter, Rows3, X,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -156,6 +156,22 @@ export default function QueryStudio() {
     const [sortCol, setSortCol] = useState<string | null>(null);
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
+    const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+    const [columnSearch, setColumnSearch] = useState('');
+    const columnPickerRef = useRef<HTMLDivElement>(null);
+
+    // close the "add more" column popover on outside click
+    useEffect(() => {
+        if (!columnPickerOpen) return;
+        const handleClick = (e: MouseEvent) => {
+            if (columnPickerRef.current && !columnPickerRef.current.contains(e.target as Node)) {
+                setColumnPickerOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [columnPickerOpen]);
+
     // -- load catalog + accounts ---------------------------------------------
     useEffect(() => {
         if (!token) return;
@@ -193,6 +209,20 @@ export default function QueryStudio() {
         [catalog, serviceKey]
     );
 
+    const selectedColumnDefs = useMemo(
+        () => (service ? service.columns.filter((c) => selectedColumns.includes(c.key)) : []),
+        [service, selectedColumns]
+    );
+
+    const pickerColumns = useMemo(() => {
+        if (!service) return [];
+        const q = columnSearch.trim().toLowerCase();
+        if (!q) return service.columns;
+        return service.columns.filter(
+            (c) => c.label.toLowerCase().includes(q) || c.key.toLowerCase().includes(q)
+        );
+    }, [service, columnSearch]);
+
     // -- selection handlers ---------------------------------------------------
     const selectService = useCallback((s: CatalogService) => {
         setServiceKey(s.key);
@@ -202,6 +232,8 @@ export default function QueryStudio() {
         setActiveRecipeId(null);
         setResult(null);
         setRunError(null);
+        setColumnPickerOpen(false);
+        setColumnSearch('');
     }, []);
 
     const toggleColumn = (key: string) => {
@@ -254,6 +286,8 @@ export default function QueryStudio() {
         setActiveRecipeId(recipe.id);
         setResult(null);
         setRunError(null);
+        setColumnPickerOpen(false);
+        setColumnSearch('');
     };
 
     // -- generated SQL preview (client-side mirror of the server builder) ----
@@ -506,34 +540,112 @@ export default function QueryStudio() {
                                         icon={Rows3}
                                         actions={
                                             <div className="flex items-center gap-1.5">
-                                                <button onClick={resetToDefaultColumns} className="text-[10px] font-bold uppercase tracking-wider text-brand-content/40 hover:text-brand-content/70 transition-colors">
-                                                    Defaults
-                                                </button>
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-brand-content/30">
+                                                    {selectedColumnDefs.length} of {service.columns.length}
+                                                </span>
                                                 <span className="text-brand-content/20">·</span>
                                                 <button onClick={selectAllColumns} className="text-[10px] font-bold uppercase tracking-wider text-brand-content/40 hover:text-brand-content/70 transition-colors">
-                                                    All
+                                                    Select all
                                                 </button>
                                             </div>
                                         }
                                     >
-                                        <div className="flex flex-wrap gap-2">
-                                            {service.columns.map((c) => {
-                                                const active = selectedColumns.includes(c.key);
-                                                return (
+                                        <div ref={columnPickerRef} className="relative flex flex-wrap items-center gap-2">
+                                            {selectedColumnDefs.length === 0 && (
+                                                <span className="text-[11px] text-brand-content/30 italic">No columns selected yet.</span>
+                                            )}
+                                            {selectedColumnDefs.map((c) => (
+                                                <span
+                                                    key={c.key}
+                                                    className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-brand-content text-[11px] font-medium"
+                                                >
+                                                    {c.label}
+                                                    <span className="text-brand-content/30 text-[9px] uppercase">{c.type}</span>
                                                     <button
-                                                        key={c.key}
                                                         onClick={() => toggleColumn(c.key)}
-                                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-all
-                                                            ${active
-                                                                ? 'border-indigo-500/40 bg-indigo-500/10 text-brand-content'
-                                                                : 'border-brand-content/10 bg-brand-content/[0.02] text-brand-content/50 hover:border-brand-content/20'}`}
+                                                        className="p-0.5 rounded-full text-brand-content/40 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                                        aria-label={`Remove ${c.label}`}
                                                     >
-                                                        {active ? <Check className="w-3 h-3 text-indigo-400" /> : <span className="w-3 h-3" />}
-                                                        {c.label}
-                                                        <span className="text-brand-content/30 text-[9px] uppercase">{c.type}</span>
+                                                        <X className="w-2.5 h-2.5" />
                                                     </button>
-                                                );
-                                            })}
+                                                </span>
+                                            ))}
+
+                                            <button
+                                                onClick={() => setColumnPickerOpen((o) => !o)}
+                                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed text-[11px] font-semibold transition-all
+                                                    ${columnPickerOpen
+                                                        ? 'border-indigo-500/50 bg-indigo-500/10 text-indigo-400'
+                                                        : 'border-brand-content/15 text-brand-content/50 hover:border-brand-content/30 hover:text-brand-content/80'}`}
+                                            >
+                                                <Plus className="w-3 h-3" /> Add more
+                                            </button>
+
+                                            <AnimatePresence>
+                                                {columnPickerOpen && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        transition={{ duration: 0.12 }}
+                                                        className="absolute top-full left-0 mt-2 w-[22rem] max-w-[90vw] rounded-xl border border-brand-content/10 bg-brand-surface shadow-2xl z-30 p-3"
+                                                    >
+                                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                                            <div className="text-[10px] font-bold uppercase tracking-widest text-brand-content/30">
+                                                                All available fields · {service.columns.length}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => setColumnPickerOpen(false)}
+                                                                className="text-brand-content/30 hover:text-brand-content/70 transition-colors"
+                                                            >
+                                                                <X className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                        <div className="relative mb-2">
+                                                            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-brand-content/30" />
+                                                            <input
+                                                                autoFocus
+                                                                value={columnSearch}
+                                                                onChange={(e) => setColumnSearch(e.target.value)}
+                                                                placeholder="Search fields…"
+                                                                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-brand-content/5 border border-brand-content/10 text-brand-content placeholder:text-brand-content/30 focus:outline-none focus:border-indigo-500/40"
+                                                            />
+                                                        </div>
+                                                        <div className="max-h-64 overflow-y-auto space-y-0.5 -mx-1 px-1">
+                                                            {pickerColumns.length === 0 && (
+                                                                <div className="text-center text-[11px] text-brand-content/30 py-6">No matching fields.</div>
+                                                            )}
+                                                            {pickerColumns.map((c) => {
+                                                                const active = selectedColumns.includes(c.key);
+                                                                return (
+                                                                    <button
+                                                                        key={c.key}
+                                                                        onClick={() => toggleColumn(c.key)}
+                                                                        className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-brand-content/[0.05] text-left transition-colors"
+                                                                    >
+                                                                        <span className="flex items-center gap-2 min-w-0">
+                                                                            <span className={`flex items-center justify-center w-4 h-4 rounded border shrink-0
+                                                                                ${active ? 'bg-indigo-500 border-indigo-500' : 'border-brand-content/20'}`}>
+                                                                                {active && <Check className="w-3 h-3 text-white" />}
+                                                                            </span>
+                                                                            <span className="text-xs text-brand-content/80 truncate">{c.label}</span>
+                                                                        </span>
+                                                                        <span className="text-brand-content/30 text-[9px] uppercase shrink-0">{c.type}</span>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        <div className="flex items-center justify-between pt-2 mt-2 border-t border-brand-content/5">
+                                                            <button onClick={resetToDefaultColumns} className="text-[10px] font-bold uppercase tracking-wider text-brand-content/40 hover:text-brand-content/70 transition-colors">
+                                                                Reset to defaults
+                                                            </button>
+                                                            <button onClick={() => setColumnPickerOpen(false)} className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
+                                                                Done
+                                                            </button>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
                                         </div>
                                     </BuilderSection>
                                 </motion.div>
