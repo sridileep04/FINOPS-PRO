@@ -1,0 +1,38 @@
+# Secrets -- NEVER let these into a build context, even accidentally via a
+# future `COPY . .`. .env.example is the one intentional exception.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Virtual envs -- never ship a host-built venv into the image; the
+# Dockerfile builds its own in Stage 1.
+venv/
+.venv/
+
+# Tests -- not needed in the runtime image, and test fixtures/AUDIT.md
+# occasionally reference sensitive-looking (if fake) values worth keeping
+# out of any shipped image regardless.
+tests/
+
+# VCS / editor / OS cruft
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Docs not needed at runtime
+test.md
+README.md

@@ -1,0 +1,49 @@
+title = "FINOPS-PRO gitleaks config"
+
+# Extend the default, well-maintained ruleset (AWS keys, generic API
+# key patterns, private keys, etc.) rather than hand-rolling our own --
+# gitleaks' default rules are actively updated for new provider key
+# formats, which a custom-only ruleset would quickly fall behind on.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-safe placeholders that look like secrets but aren't"
+paths = [
+  # Test-only fixture values, generated fresh for this repo and used
+  # only against ephemeral test containers -- see backend/.env.test.
+  # (Also gitignored by `.env.*` in the root .gitignore, so this
+  # allowlist entry is belt-and-suspenders in case that ever changes.)
+  '''backend/\.env\.test''',
+  # Generated test-coverage HTML reports mirror source file contents
+  # verbatim, including the Docs.tsx example command below -- these are
+  # build artifacts, not source, and are gitignored (see .gitignore
+  # `coverage/`); excluded here too in case a report is ever committed
+  # by mistake.
+  '''frontend/coverage/''',
+]
+regexes = [
+  # The sandbox demo password is intentionally public (see
+  # backend/tests/security/AUDIT.md) -- not a leaked real credential.
+  '''sandbox_secret_key''',
+  # Docs.tsx shows this as a copy-pasteable example command on the
+  # in-app documentation page ("case 'ghost_agent'") -- a fake
+  # placeholder token for a code sample, not a real credential.
+  '''af_live_948a37fbc28d3e8e7a02db6ef93d8e58''',
+]
+
+# Deliberately NOT allowlisting `backend/.env.example` or
+# `steampipe/.env.example` by path: backend/.env.example correctly uses
+# non-secret-looking placeholders ("change-me-service-token") that
+# don't trip gitleaks anyway, but steampipe/.env.example does NOT
+# follow that convention -- it contains a real 64-char hex value in the
+# exact shape `openssl rand -hex 32` produces, same issue as the
+# test.md finding below. A blanket path-allowlist for "*.env.example"
+# would have hidden that. See backend/tests/security/AUDIT.md.
+#
+# NOT allowlisted, and deliberately left findable: the STEAMPIPE_SERVICE_TOKEN
+# values in backend/test.md, steampipe/app/test.md, AND
+# steampipe/.env.example (three separate real-looking secrets, not one).
+# See backend/tests/security/AUDIT.md for the recommended fix (replace
+# with placeholders + rotate if any were used against a real
+# steampipe-service instance).

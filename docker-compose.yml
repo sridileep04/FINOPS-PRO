@@ -1,0 +1,239 @@
+# Production-oriented compose stack. Local dev conveniences (hot reload,
+# exposed DB/Redis ports, the Vite dev server) live in
+# docker-compose.override.yml, which Docker Compose loads automatically
+# alongside this file -- run `docker compose up` for dev-with-overrides,
+# or `docker compose -f docker-compose.yml up` alone for a prod-shaped
+# stack with none of the dev conveniences/exposed ports.
+#
+# Security posture applied throughout, deliberately, not incidentally:
+#   - No service trusts another via a shared root network beyond what's
+#     declared -- `internal: true` on the data-plane network means
+#     postgres/redis/steampipe-service have NO route to the internet at
+#     all, even if compromised.
+#   - Only `frontend` publishes a port to the host; postgres/redis/
+#     steampipe-service/backend are reachable only from other containers
+#     on the compose network, matching how you'd firewall these in any
+#     real deployment (a customer's browser should never be able to open
+#     a raw connection to Postgres or to the steampipe microservice).
+#   - `security_opt: no-new-privileges` + `cap_drop: [ALL]` on every
+#     custom-built service: none of these processes need to escalate
+#     privileges or hold Linux capabilities beyond what's already granted
+#     by their base image's default user.
+#   - `restart: unless-stopped` + real HEALTHCHECKs (defined in each
+#     Dockerfile) + `depends_on: condition: service_healthy` so the stack
+#     comes up in the right order and self-heals, instead of a backend
+#     that starts before Postgres is actually ready to accept connections.
+#   - Secrets (.env, gitignored) are the ONLY place real credentials live
+#     -- nothing here or in any Dockerfile hardcodes a password/token.
+
+networks:
+  data-plane:
+    internal: true # postgres, redis, steampipe-service: no internet access, no host port exposure
+  app-plane:
+    # backend <-> frontend <-> internet (for outbound calls: Groq/OpenAI,
+    # customer AWS accounts via assumed roles)
+
+volumes:
+  postgres_data:
+  redis_data:
+  steampipe_data:
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    <<: *hardening
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data-plane
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Postgres's own entrypoint needs to chown its data dir on first run,
+    # which requires starting as root internally before it drops
+    # privileges itself -- cap_drop: ALL here would break that. This is
+    # the one service where we rely on the upstream image's own
+    # well-audited privilege-drop instead of layering our own on top.
+    cap_drop: []
+
+  redis:
+    image: redis:7-alpine
+    <<: *hardening
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - data-plane
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  steampipe-service:
+    build:
+      context: ./steampipe
+      args:
+        STEAMPIPE_VERSION: ${STEAMPIPE_VERSION:-latest}
+    <<: *hardening
+    restart: unless-stopped
+    environment:
+      STEAMPIPE_SERVICE_TOKEN: ${STEAMPIPE_SERVICE_TOKEN:?STEAMPIPE_SERVICE_TOKEN is required}
+      STEAMPIPE_INSTALL_DIR: /home/steampipe/.steampipe
+      STEAMPIPE_WORKSPACES_DIR: /home/steampipe/workspaces
+      PLATFORM_CREDENTIAL_SOURCE: ${PLATFORM_CREDENTIAL_SOURCE:-EcsContainer}
+      STEAMPIPE_QUERY_TIMEOUT_SECONDS: ${STEAMPIPE_QUERY_TIMEOUT_SECONDS:-300}
+      STEAMPIPE_MAX_CONCURRENT_QUERIES: ${STEAMPIPE_MAX_CONCURRENT_QUERIES:-8}
+    volumes:
+      - steampipe_data:/home/steampipe/.steampipe
+    networks:
+      - data-plane # NOT app-plane -- only the backend talks to this, never the frontend/internet directly
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:8001/health']
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  backend:
+    build:
+      context: ./backend
+    <<: *hardening
+    restart: unless-stopped
+    command: ['uvicorn-server']
+    environment:
+      DB_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ENCRYPTION_BACKEND: ${ENCRYPTION_BACKEND:-fernet}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY is required}
+      STEAMPIPE_SERVICE_TOKEN: ${STEAMPIPE_SERVICE_TOKEN:?STEAMPIPE_SERVICE_TOKEN is required}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      SEED_DEMO_USERS: ${SEED_DEMO_USERS:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      API_WORKERS: ${API_WORKERS:-2}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    networks:
+      - data-plane # to reach postgres/redis/steampipe-service
+      - app-plane # to be reached by frontend, and to call out to Groq/AWS
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      steampipe-service:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:8000/health']
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    # No `ports:` here -- only reachable from other containers (the
+    # frontend's nginx reverse-proxies /api to it). Exposing 8000 directly
+    # to the host is a docker-compose.override.yml (dev-only) concern.
+
+  celery-worker:
+    build:
+      context: ./backend
+    <<: *hardening
+    restart: unless-stopped
+    command: ['celery-worker']
+    environment:
+      DB_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ENCRYPTION_BACKEND: ${ENCRYPTION_BACKEND:-fernet}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY is required}
+      STEAMPIPE_SERVICE_TOKEN: ${STEAMPIPE_SERVICE_TOKEN:?STEAMPIPE_SERVICE_TOKEN is required}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    networks:
+      - data-plane
+      - app-plane
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      steampipe-service:
+        condition: service_healthy
+
+  celery-beat:
+    build:
+      context: ./backend
+    <<: *hardening
+    restart: unless-stopped
+    command: ['celery-beat']
+    environment:
+      DB_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ENCRYPTION_BACKEND: ${ENCRYPTION_BACKEND:-fernet}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY is required}
+      STEAMPIPE_SERVICE_TOKEN: ${STEAMPIPE_SERVICE_TOKEN:?STEAMPIPE_SERVICE_TOKEN is required}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    networks:
+      - data-plane
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    <<: *hardening
+    restart: unless-stopped
+    ports:
+      - '80:8080' # the only port this stack exposes to the host by default
+    networks:
+      - app-plane
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:8080/']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    # TLS termination: put a real reverse proxy / load balancer (nginx,
+    # Caddy, or your cloud provider's ALB) in front of this in an actual
+    # deployment and terminate HTTPS there -- this compose file is
+    # infrastructure-agnostic on purpose and doesn't assume a certificate
+    # source. The Strict-Transport-Security header in nginx.conf is a
+    # no-op until that's in place.

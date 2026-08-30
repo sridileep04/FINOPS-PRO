@@ -1,0 +1,505 @@
+name: CI
+
+# Runs on every PR and every push to main. Heavier jobs (E2E, container
+# scan, full performance load test) are gated to main/PR-to-main or a
+# nightly schedule so PR feedback from the fast jobs stays quick.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * *' # nightly, UTC -- runs the heavier/slower checks
+  workflow_dispatch: {} # lets anyone trigger a full run manually from the Actions tab
+
+env:
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '20'
+
+jobs:
+  # ===========================================================================
+  # Fast, no-Docker-needed backend checks -- unit tests + the DB-independent
+  # half of the contract tests. Runs on every push/PR; this is the job you
+  # want failing within ~30s of a bad commit.
+  # ===========================================================================
+  backend-unit-tests:
+    name: Backend / Unit + Contract tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: pytest tests/unit -v --cov=app --cov-report=xml --cov-report=term-missing
+
+      - name: Run DB-independent contract tests
+        run: pytest tests/integration/test_api_contract.py -v
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-unit-coverage
+          path: backend/coverage.xml
+          retention-days: 14
+
+  # ===========================================================================
+  # Backend integration tests: testcontainers spins up a real disposable
+  # pgvector/pgvector:pg16 container using the runner's own Docker daemon
+  # (GitHub-hosted ubuntu-latest runners have Docker preinstalled -- no
+  # `services:` block needed, unlike a typical Postgres-as-a-service setup).
+  # ===========================================================================
+  backend-integration-tests:
+    name: Backend / Integration tests (real Postgres)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run integration tests
+        run: pytest tests/integration -v -m integration --ignore=tests/integration/test_api_contract.py
+        env:
+          # testcontainers-python reads this to know it's safe to talk to
+          # the Docker daemon on a CI runner without extra ceremony.
+          TESTCONTAINERS_RYUK_DISABLED: 'false'
+
+  # ===========================================================================
+  # Frontend unit/component tests (Vitest + React Testing Library).
+  # ===========================================================================
+  frontend-unit-tests:
+    name: Frontend / Unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-unit-coverage
+          path: frontend/coverage
+          retention-days: 14
+
+  # ===========================================================================
+  # SECURITY -- single consolidated DevSecOps gate. Every security check in
+  # this project lives in this one stage (not split across jobs) so there is
+  # exactly one place that answers "did this change pass security review":
+  #   1. SAST                  (Bandit)
+  #   2. Backend dependency CVEs (pip-audit)
+  #   3. Frontend dependency CVEs (npm audit, production deps only)
+  #   4. Secret scanning        (gitleaks, full git history)
+  #   5. SQL-injection regression tests (the Query Builder audit)
+  #   6. Container image scanning (Trivy) -- backend, frontend, AND
+  #      steampipe-service images, all built fresh and scanned every run
+  #   7. Dockerfile linting     (hadolint)
+  #
+  # Runs on every push/PR -- a security regression should block a merge
+  # exactly like a failing test, not be discoverable only on a schedule.
+  # ===========================================================================
+  security:
+    name: Security (SAST + dependency + secrets + container scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks scans full history, not just the working tree
+
+      # --- 1 & 2: Python SAST + backend dependency CVEs ---------------------
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Bandit (Python SAST)
+        working-directory: backend
+        run: bandit -c .bandit -r app -f screen
+
+      - name: pip-audit (backend dependency vulnerabilities)
+        working-directory: backend
+        # Informational for now, not build-failing -- see
+        # backend/tests/security/AUDIT.md for the current findings
+        # (python-jose, starlette, python-multipart CVEs) and the
+        # tracked plan to upgrade them. Flip to a failing check once
+        # those are resolved, so this doesn't block unrelated PRs on
+        # pre-existing findings that already have an owner and a plan.
+        run: pip-audit -r requirements.txt --desc || echo "::warning::pip-audit found known vulnerabilities -- see backend/tests/security/AUDIT.md"
+
+      - name: Query-builder injection regression tests
+        working-directory: backend
+        run: pytest tests/unit/test_query_builder_security.py -v
+
+      # --- 3: Frontend dependency CVEs ---------------------------------------
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: npm audit (production dependencies only)
+        working-directory: frontend
+        # Unlike pip-audit above, this one DOES fail the build: the
+        # frontend's prod-dependency tree is clean today (see AUDIT.md),
+        # so any new finding here is a genuine regression worth
+        # blocking on, not an accepted pre-existing risk.
+        run: npm audit --omit=dev --audit-level=high
+
+      # --- 4: Secret scanning ------------------------------------------------
+      - name: gitleaks (secret scanning)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      # --- 7: Dockerfile linting ----------------------------------------------
+      - name: Hadolint (backend Dockerfile)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: backend/Dockerfile
+
+      - name: Hadolint (frontend Dockerfile)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+
+      - name: Hadolint (steampipe Dockerfile)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: steampipe/Dockerfile
+
+      # --- 6: Build every image and scan each with Trivy ---------------------
+      # Built fresh here (not reused from a registry) so the scan always
+      # reflects exactly what this commit would ship, including the base
+      # image layer -- catches newly-disclosed CVEs in python:3.12-slim /
+      # nginx-unprivileged / debian:bookworm-slim even when this repo's own
+      # code hasn't changed at all.
+      - name: Build backend image
+        run: docker build -t finops-backend:${{ github.sha }} ./backend
+
+      - name: Build frontend image
+        run: docker build -t finops-frontend:${{ github.sha }} ./frontend
+
+      - name: Build steampipe-service image
+        run: docker build -t finops-steampipe:${{ github.sha }} ./steampipe
+
+      - name: Trivy scan -- backend image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: finops-backend:${{ github.sha }}
+          trivy-config: trivy.yaml
+
+      - name: Trivy scan -- frontend image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: finops-frontend:${{ github.sha }}
+          trivy-config: trivy.yaml
+
+      - name: Trivy scan -- steampipe-service image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: finops-steampipe:${{ github.sha }}
+          trivy-config: trivy.yaml
+
+  # ===========================================================================
+  # End-to-end tests (Playwright) against the real, full docker-composed
+  # stack. Heavier and slower than the jobs above, so gated to pushes to
+  # main, the nightly schedule, and manual dispatch -- not every PR, to
+  # keep PR feedback fast. Promote this to run on every PR once the suite
+  # is proven stable and fast enough in practice.
+  # ===========================================================================
+  e2e-tests:
+    name: E2E tests (Playwright, full docker-compose stack)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate ephemeral encryption key for this CI run
+        # Never hardcode a real-shaped Fernet key in the repo, even a
+        # "throwaway CI-only" one -- gitleaks correctly flags it (see
+        # backend/tests/security/AUDIT.md's leaked-secret findings for
+        # why that instinct is right), and it normalizes committing
+        # secret-shaped values. Generated fresh, used only within this
+        # job, discarded when the runner is destroyed.
+        run: echo "CI_CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')" >> "$GITHUB_ENV"
+
+      - name: Write CI .env for docker compose
+        # Same shape as .env.example, but with CI-only throwaway values --
+        # never real secrets, and never persisted anywhere beyond this
+        # ephemeral runner's filesystem.
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=finopsuser
+          POSTGRES_PASSWORD=ci-e2e-password
+          POSTGRES_DB=finopsdb
+          SECRET_KEY=ci-e2e-secret-key
+          CREDENTIAL_ENCRYPTION_KEY=${CI_CREDENTIAL_ENCRYPTION_KEY}
+          STEAMPIPE_SERVICE_TOKEN=ci-e2e-steampipe-token
+          ENVIRONMENT=development
+          SEED_DEMO_USERS=true
+          CORS_ORIGINS=*
+          EOF
+
+      - name: Build and start the full stack (prod-shaped compose, no dev override)
+        # Deliberately -f docker-compose.yml only -- exercises the exact
+        # images/config this app would actually ship with, catching
+        # Dockerfile/compose regressions that a manually-started
+        # `uvicorn`/`npm run dev` (the old approach here) could never catch.
+        run: docker compose -f docker-compose.yml up -d --build
+
+      - name: Wait for the stack to become healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost/health >/dev/null 2>&1; then
+              echo "Stack is up and responding"; exit 0
+            fi
+            echo "Waiting for stack to respond... ($i/30)"; sleep 5
+          done
+          echo "::error::Stack did not become healthy in time"
+          docker compose -f docker-compose.yml ps
+          docker compose -f docker-compose.yml logs
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install Playwright + browsers
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium firefox webkit
+
+      - name: Run Playwright tests
+        working-directory: e2e
+        run: npm test
+        env:
+          BASE_URL: http://localhost # frontend's nginx, published on host port 80 (see docker-compose.yml)
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 14
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml logs --no-color > compose-logs.txt
+
+      - name: Upload container logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-compose-logs
+          path: compose-logs.txt
+          retention-days: 7
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose -f docker-compose.yml down -v
+
+  # ===========================================================================
+  # Performance smoke test: fast (~30s) k6 run against the auth endpoint,
+  # on every push/PR as a canary. The heavier ramping dashboard-load-test.js
+  # (~3 min) only runs nightly/manual -- see the `scheduled-performance` job.
+  # ===========================================================================
+  performance-smoke-test:
+    name: Performance / Auth smoke test (k6)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: finopsuser
+          POSTGRES_PASSWORD: finopspassword
+          POSTGRES_DB: finopsdb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    env:
+      DB_USER: finopsuser
+      DB_PASSWORD: finopspassword
+      DB_NAME: finopsdb
+      DB_HOST: localhost
+      DB_PORT: 5432
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      SECRET_KEY: ci-perf-secret-key
+      ENCRYPTION_BACKEND: fernet
+      STEAMPIPE_SERVICE_TOKEN: ci-perf-steampipe-token
+      ENVIRONMENT: development
+      SEED_DEMO_USERS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate ephemeral encryption key for this CI run
+        run: echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run database migrations
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: Start backend API (background)
+        working-directory: backend
+        run: |
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
+          npx --yes wait-on@7 -t 30000 http://localhost:8000/health
+
+      - name: Install k6
+        run: |
+          curl -sL https://github.com/grafana/k6/releases/download/v0.55.0/k6-v0.55.0-linux-amd64.tar.gz | tar xz
+          sudo mv k6-v0.55.0-linux-amd64/k6 /usr/local/bin/
+
+      - name: Run auth smoke test
+        run: k6 run perf/auth-smoke-test.js
+        env:
+          BASE_URL: http://localhost:8000
+
+  # ===========================================================================
+  # Full performance load test: only nightly or manual -- this is the
+  # ~3-minute ramping test against the dashboard aggregation endpoints,
+  # too slow/heavy to run on every push.
+  # ===========================================================================
+  performance-load-test:
+    name: Performance / Full dashboard load test (k6, scheduled)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: finopsuser
+          POSTGRES_PASSWORD: finopspassword
+          POSTGRES_DB: finopsdb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    env:
+      DB_USER: finopsuser
+      DB_PASSWORD: finopspassword
+      DB_NAME: finopsdb
+      DB_HOST: localhost
+      DB_PORT: 5432
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      SECRET_KEY: ci-perf-secret-key
+      ENCRYPTION_BACKEND: fernet
+      STEAMPIPE_SERVICE_TOKEN: ci-perf-steampipe-token
+      ENVIRONMENT: development
+      SEED_DEMO_USERS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate ephemeral encryption key for this CI run
+        run: echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run database migrations
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: Start backend API (background)
+        working-directory: backend
+        run: |
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 > backend.log 2>&1 &
+          npx --yes wait-on@7 -t 30000 http://localhost:8000/health
+
+      - name: Install k6
+        run: |
+          curl -sL https://github.com/grafana/k6/releases/download/v0.55.0/k6-v0.55.0-linux-amd64.tar.gz | tar xz
+          sudo mv k6-v0.55.0-linux-amd64/k6 /usr/local/bin/
+
+      - name: Run dashboard load test
+        run: k6 run --out json=k6-results.json perf/dashboard-load-test.js
+        env:
+          BASE_URL: http://localhost:8000
+
+      - name: Upload k6 results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-load-test-results
+          path: k6-results.json
+          retention-days: 30

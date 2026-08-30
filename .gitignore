@@ -31,6 +31,10 @@ pip-delete-this-directory.txt
 htmlcov/
 .tox/
 .nox/
+coverage/
+playwright-report/
+test-results/
+blob-report/
 
 # ==============================================================================
 # 3. ReactJS Frontend

@@ -1,0 +1,74 @@
+# Auto-loaded by `docker compose up` alongside docker-compose.yml (Compose
+# merges docker-compose.override.yml automatically if present -- no -f
+# flag needed for dev). For a prod-shaped run with none of this, use:
+#   docker compose -f docker-compose.yml up
+#
+# Everything here trades away some of the base file's hardening
+# specifically because it's dev-only and never how this should run
+# against real customer data:
+#   - Postgres/Redis ports exposed to the host (127.0.0.1 only) so you
+#     can `psql`/`redis-cli` in from your host machine while debugging.
+#   - Backend port exposed directly so you can hit it without going
+#     through the frontend's nginx proxy.
+#   - Source directories bind-mounted for hot reload instead of baked
+#     into the image at build time.
+#   - SEED_DEMO_USERS turned on and ENVIRONMENT set to development.
+
+services:
+  postgres:
+    ports:
+      - '127.0.0.1:5432:5432'
+
+  redis:
+    ports:
+      - '127.0.0.1:6379:6379'
+
+  backend:
+    command: ['uvicorn-server']
+    environment:
+      ENVIRONMENT: development
+      SEED_DEMO_USERS: 'true'
+      CORS_ORIGINS: '*'
+      API_WORKERS: '1' # single worker makes debugging/log-reading simpler
+    ports:
+      - '127.0.0.1:8000:8000'
+    volumes:
+      # Mounting source over the built image avoids a full rebuild for
+      # every Python change -- still needs a container restart to pick up
+      # changes (add `--reload` to the uvicorn invocation in
+      # docker-entrypoint.sh locally for true hot reload; left off by
+      # default so this override's command stays identical in shape to prod).
+      - ./backend/app:/app/app:ro
+      - ./backend/alembic:/app/alembic:ro
+
+  celery-worker:
+    environment:
+      ENVIRONMENT: development
+    volumes:
+      - ./backend/app:/app/app:ro
+
+  frontend:
+    # Swap the prod nginx image for the Vite dev server: build directly
+    # from the node:20-slim builder stage instead of running the full
+    # multi-stage build, and bind-mount source for real hot reload.
+    build:
+      context: ./frontend
+      target: builder
+    command: ['npm', 'run', 'dev']
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./frontend/src:/build/src
+      - ./frontend/public:/build/public
+    environment:
+      DISABLE_HMR: 'false'
+    # Note: the dev server's vite.config.ts proxy targets 127.0.0.1:8000,
+    # which inside this container means "this frontend container", not the
+    # backend service. Containerizing the frontend dev server is mainly
+    # useful for CI parity -- for day-to-day local editing, running
+    # `npm run dev` directly on your host (against the containerized
+    # backend's exposed 127.0.0.1:8000 port above) avoids this mismatch
+    # entirely and is the recommended workflow; see README "Local development".
+    depends_on:
+      backend:
+        condition: service_healthy
