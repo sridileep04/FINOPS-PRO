@@ -224,7 +224,7 @@ export default function OrphanedResources() {
                         </h2>
                     </div>
                     <p className="text-xs text-brand-content/60 max-w-xl">
-                        When enabled, the AetherFin automation engine is armed. You can directly trigger, monitor, and execute secure automated deletion playbooks that verify dependencies and wipe orphaned cloud resources directly from the UI.
+                        When enabled, the MarigoldFin automation engine is armed. You can directly trigger, monitor, and execute secure automated deletion playbooks that verify dependencies and wipe orphaned cloud resources directly from the UI.
                     </p>
                 </div>
 
@@ -397,7 +397,7 @@ export default function OrphanedResources() {
                                     <div className="h-4 w-[1px] bg-brand-content/10 mx-1" />
                                     <div className="flex items-center gap-2 text-brand-content/50 text-xs font-mono">
                                         <Terminal className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                                        <span>aetherfin-remediation-engine: ~</span>
+                                        <span>marigoldfin-remediation-engine: ~</span>
                                     </div>
                                 </div>
 

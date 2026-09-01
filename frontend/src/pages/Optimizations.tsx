@@ -667,7 +667,7 @@ export default function Optimizations() {
                                         <div className="flex items-center justify-between text-xs text-brand-content/40 font-mono">
                                             <span className="flex items-center gap-1.5">
                                                 <Terminal className="h-3.5 w-3.5 text-indigo-400" />
-                                                AetherFin Secure CLI Console
+                                                MarigoldFin Secure CLI Console
                                             </span>
                                             {isExecuting && <span className="text-[10px] text-indigo-400 animate-pulse font-bold uppercase tracking-wider">● Executing</span>}
                                         </div>

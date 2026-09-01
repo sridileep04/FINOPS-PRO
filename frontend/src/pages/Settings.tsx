@@ -614,7 +614,7 @@ export default function Settings() {
 
     const daemonInstallCode = `curl -sSfL https://agent.marigoldfinops.com/install.sh | sh -s -- \\
   --token="${token?.substring(0, 20)}..." \\
-  --org-id="aetherfin-org-01" \\
+  --org-id="marigoldfin-org-01" \\
   --mode="sample-and-push"`;
 
     const isAdmin = user?.role === 'admin';
@@ -1452,7 +1452,7 @@ export default function Settings() {
                                                 value={platformSettings.cloud_accounts_configured.gcp}
                                                 onChange={(e) => handleCloudAccountChange('gcp', e.target.value)}
                                                 className="w-full bg-brand-content/[0.02] border border-brand-content/10 rounded-lg py-2 px-3 text-xs text-brand-content placeholder-white/20 disabled:opacity-50"
-                                                placeholder="e.g. aetherfin-prod-main"
+                                                placeholder="e.g. marigoldfin-prod-main"
                                             />
                                         </div>
                                         <div>
@@ -1576,7 +1576,7 @@ export default function Settings() {
                                         Required Cost Allocation Tags
                                     </CardTitle>
                                     <CardDescription className="text-xs text-brand-content/40">
-                                        AetherFin scans multi-account assets and marks those missing compliance tags as "financial waste".
+                                        MarigoldFin scans multi-account assets and marks those missing compliance tags as "financial waste".
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
@@ -1637,7 +1637,7 @@ export default function Settings() {
                                         <div>
                                             <CardTitle className="text-sm font-semibold text-brand-content flex items-center gap-2">
                                                 <Terminal className="h-4 w-4 text-indigo-400" />
-                                                AetherFin Edge Collector Daemon
+                                                MarigoldFin Edge Collector Daemon
                                             </CardTitle>
                                             <CardDescription className="text-xs text-brand-content/40">
                                                 Lightweight local background process executing inside client isolated VPCs, pushing secure compressed telemetry.

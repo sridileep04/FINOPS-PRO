@@ -1,0 +1,15 @@
+# Used by `trivy image` / `trivy config` against steampipe/Dockerfile's
+# built image (and any future backend Dockerfile). See the
+# `container-scan` job in .github/workflows/ci.yml for how this wires
+# into CI -- it builds the steampipe-service image and scans it before
+# any deploy step would run.
+#
+# Only fail the build on HIGH/CRITICAL: a debian:bookworm-slim base
+# plus a curl'd-in Steampipe binary will always carry some LOW/MEDIUM
+# OS-package noise that isn't worth blocking merges over, but a
+# HIGH/CRITICAL finding in an image that gets AssumeRole'd into every
+# customer's AWS account is worth stopping the pipeline for.
+severity: HIGH,CRITICAL
+exit-code: 1
+ignore-unfixed: true
+format: table

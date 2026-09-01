@@ -27,7 +27,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     private handleReportIssue = () => {
         const body = `Error details:\n\n${this.state.error?.message}\n\nStack trace:\n${this.state.error?.stack}`;
-        window.location.href = `mailto:support@aetherfin.com?subject=AetherFin Crash Report&body=${encodeURIComponent(body)}`;
+        window.location.href = `mailto:support@marigoldfin.com?subject=MarigoldFin Crash Report&body=${encodeURIComponent(body)}`;
     };
 
     public render() {

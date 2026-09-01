@@ -49,7 +49,7 @@ export function ArchitectureVisualizer() {
             latency: 'Daily / 24h',
             costImpact: 'Virtually Free (~$0.005 / Query)',
             costSla: '99.9% Allocation Ledger Accuracy',
-            description: 'The foundation of AetherFin. Raw hourly billing line-items are exported by AWS directly to parquet format on S3 and queried with ultra-optimized, partitioned Amazon Athena SQL execution. Avoids active API pollution entirely.',
+            description: 'The foundation of MarigoldFin. Raw hourly billing line-items are exported by AWS directly to parquet format on S3 and queried with ultra-optimized, partitioned Amazon Athena SQL execution. Avoids active API pollution entirely.',
             technicalDetails: [
                 'Partitioned by year, month, and account ID to limit scanned data sizes.',
                 'Saves up to 98% compared to continuous Cost Explorer polling overhead.',
@@ -60,7 +60,7 @@ export function ArchitectureVisualizer() {
   "line_item_usage_type": "g5.12xlarge-hours",
   "line_item_unblended_cost": 5.7600000000,
   "identity_time_interval": "2026-07-12T04:00:00Z/2026-07-12T05:00:00Z",
-  "resource_tags_user_project": "AetherFin-Core-LLM"
+  "resource_tags_user_project": "MarigoldFin-Core-LLM"
 }`,
             querySample: `SELECT 
   line_item_resource_id,
@@ -166,11 +166,11 @@ WHERE resource_id = 'i-09f1dca23b9d'
   "compressed_payload_hash": "e3b0c44298fc1c149afbf4c8996fb924"
 }`,
             querySample: `# Local VPC Client Daemon Collector Cycle Loop
-$ aetherfin-daemon collect \\
+$ marigoldfin-daemon collect \\
     --interval=60s \\
     --compress=gzip \\
     --encrypt-key=$AES_SECRET \\
-    --destination=s3://aetherfin-client-telemetry-array/`
+    --destination=s3://marigoldfin-client-telemetry-array/`
         }
     ];
 
@@ -210,7 +210,7 @@ $ aetherfin-daemon collect \\
                         Telemetry priority waterfall
                     </h2>
                     <p className="text-sm text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                        Continuously tracking infrastructure costs can inadvertently spike CloudWatch API expenses. AetherFin resolves this with a multi-layered FinOps capture pipeline prioritizing low-cost ledgers.
+                        Continuously tracking infrastructure costs can inadvertently spike CloudWatch API expenses. MarigoldFin resolves this with a multi-layered FinOps capture pipeline prioritizing low-cost ledgers.
                     </p>
                 </div>
 
@@ -232,8 +232,8 @@ $ aetherfin-daemon collect \\
                                         key={node.id}
                                         onClick={() => setActiveNode(node.id)}
                                         className={`w-full text-left p-4.5 rounded-2xl border transition-all duration-300 relative group flex items-start gap-4 ${isActive
-                                                ? 'bg-gradient-to-r from-indigo-500/[0.08] to-transparent border-indigo-500/40 shadow-[0_4px_30px_rgba(99,102,241,0.06)]'
-                                                : 'bg-black/40 border-brand-content/[0.03] hover:border-brand-content/10 hover:bg-black/60'
+                                            ? 'bg-gradient-to-r from-indigo-500/[0.08] to-transparent border-indigo-500/40 shadow-[0_4px_30px_rgba(99,102,241,0.06)]'
+                                            : 'bg-black/40 border-brand-content/[0.03] hover:border-brand-content/10 hover:bg-black/60'
                                             }`}
                                     >
                                         {/* Active glowing indicator block */}
@@ -246,8 +246,8 @@ $ aetherfin-daemon collect \\
                                         )}
 
                                         <div className={`p-2.5 rounded-xl border transition-all shrink-0 ${isActive
-                                                ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
-                                                : 'bg-brand-content/5 text-slate-500 border-brand-content/5 group-hover:text-slate-300'
+                                            ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+                                            : 'bg-brand-content/5 text-slate-500 border-brand-content/5 group-hover:text-slate-300'
                                             }`}>
                                             <NodeIcon className="w-5 h-5" />
                                         </div>
@@ -258,9 +258,9 @@ $ aetherfin-daemon collect \\
                                                     {node.title}
                                                 </span>
                                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${node.priority === 1 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15' :
-                                                        node.priority === 2 ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/15' :
-                                                            node.priority === 3 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/15' :
-                                                                'bg-purple-500/10 text-purple-400 border border-purple-500/15'
+                                                    node.priority === 2 ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/15' :
+                                                        node.priority === 3 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/15' :
+                                                            'bg-purple-500/10 text-purple-400 border border-purple-500/15'
                                                     }`}>
                                                     P{node.priority}
                                                 </span>

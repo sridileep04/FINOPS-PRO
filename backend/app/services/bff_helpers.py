@@ -427,7 +427,7 @@ INTEGRATION_DEFS = [
     dict(key="gcp_bq", name="GCP BigQuery Billing Export", provider="GCP", category="cheap",
          details="Reads your GCP billing export dataset in BigQuery."),
     dict(key="gcp_wif", name="GCP Workload Identity Federation", provider="GCP", category="secure",
-         details="Keyless OIDC federation trust between AetherFin and your GCP project."),
+         details="Keyless OIDC federation trust between MarigoldFin and your GCP project."),
     dict(key="gcp_api", name="GCP Service Account Key", provider="GCP", category="fast",
          details="JSON service-account key with Billing Account Viewer access."),
     dict(key="azure_export", name="Azure Cost Export", provider="Azure", category="cheap",

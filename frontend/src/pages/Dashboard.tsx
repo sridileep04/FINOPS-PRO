@@ -377,7 +377,7 @@ export default function Dashboard() {
                     <div className="p-4 flex justify-between items-center shrink-0 border-b border-brand-content/5 bg-gradient-to-r from-rose-950/10 to-transparent">
                         <div className="flex items-center gap-2">
                             <AlertOctagon className="h-4 w-4 text-rose-500 animate-pulse" />
-                            <h3 className="text-xs font-semibold text-brand-content uppercase tracking-wider">AetherFin™ Cost Anomaly Intelligence</h3>
+                            <h3 className="text-xs font-semibold text-brand-content uppercase tracking-wider">MarigoldFin™ Cost Anomaly Intelligence</h3>
                         </div>
                         <span className="px-2 py-0.5 bg-rose-500/10 border border-rose-500/20 text-[9px] font-bold rounded uppercase tracking-widest text-rose-400">Autonomous Core</span>
                     </div>

@@ -13,7 +13,7 @@ interface TourStep {
 const TOUR_STEPS: TourStep[] = [
     {
         id: 1,
-        title: "Welcome to AetherFin",
+        title: "Welcome to MarigoldFin",
         description: "Your autonomous cloud cost intelligence platform. We help you uncover invisible infrastructure costs and optimize your cloud spend with precision.",
         icon: <Zap className="w-8 h-8 text-indigo-400" />
     },

@@ -320,7 +320,7 @@ aws iam attach-role-policy \\
                                         <span className="w-5 h-5 rounded bg-indigo-500/10 text-indigo-400 font-bold flex items-center justify-center shrink-0">1</span>
                                         <div className="space-y-1">
                                             <span className="text-brand-content font-bold">Create S3 Bucket:</span>
-                                            <p className="text-[11px]">Deploy a bucket named <code className="text-brand-content">aetherfin-billing-reports-236782813401</code> in <code className="text-brand-content">us-east-1</code>. Ensure bucket policies allow AWS Billing platform writes.</p>
+                                            <p className="text-[11px]">Deploy a bucket named <code className="text-brand-content">marigoldfin-billing-reports-236782813401</code> in <code className="text-brand-content">us-east-1</code>. Ensure bucket policies allow AWS Billing platform writes.</p>
                                         </div>
                                     </div>
 
@@ -328,7 +328,7 @@ aws iam attach-role-policy \\
                                         <span className="w-5 h-5 rounded bg-indigo-500/10 text-indigo-400 font-bold flex items-center justify-center shrink-0">2</span>
                                         <div className="space-y-1">
                                             <span className="text-brand-content font-bold">Configure CUR in Billing Console:</span>
-                                            <p className="text-[11px]">Navigate to AWS Billing Console -&gt; Cost &amp; Usage Reports. Name the report <code className="text-brand-content">AetherFinReports</code>, check <code className="text-brand-content">Include Resource IDs</code>, select daily delivery to your bucket, and set export format to GZIP/Parquet.</p>
+                                            <p className="text-[11px]">Navigate to AWS Billing Console -&gt; Cost &amp; Usage Reports. Name the report <code className="text-brand-content">MarigoldFinReports</code>, check <code className="text-brand-content">Include Resource IDs</code>, select daily delivery to your bucket, and set export format to GZIP/Parquet.</p>
                                         </div>
                                     </div>
 
@@ -346,14 +346,14 @@ aws iam attach-role-policy \\
                 );
 
             case 'gcp_wif':
-                const gcpTf = `resource "google_iam_workload_identity_pool" "aetherfin_pool" {
-  workload_identity_pool_id = "aetherfin-pool"
-  display_name              = "AetherFin Identity Pool"
+                const gcpTf = `resource "google_iam_workload_identity_pool" "marigoldfin_pool" {
+  workload_identity_pool_id = "marigoldfin-pool"
+  display_name              = "MarigoldFin Identity Pool"
 }
 
-resource "google_iam_workload_identity_pool_provider" "aetherfin_provider" {
-  workload_identity_pool_id          = google_iam_workload_identity_pool.aetherfin_pool.workload_identity_pool_id
-  workload_identity_pool_provider_id = "aetherfin-saas-provider"
+resource "google_iam_workload_identity_pool_provider" "marigoldfin_provider" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.marigoldfin_pool.workload_identity_pool_id
+  workload_identity_pool_provider_id = "marigoldfin-saas-provider"
   
   aws {
     account_id = "236782813401" # Marigold FinOps AWS principal account ID
@@ -361,9 +361,9 @@ resource "google_iam_workload_identity_pool_provider" "aetherfin_provider" {
 }
 
 resource "google_service_account_iam_member" "wif_binding" {
-  service_account_id = "projects/my-gcp-project/serviceAccounts/aetherfin-viewer-sa@my-gcp-project.iam.gserviceaccount.com"
+  service_account_id = "projects/my-gcp-project/serviceAccounts/marigoldfin-viewer-sa@my-gcp-project.iam.gserviceaccount.com"
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/\${google_iam_workload_identity_pool.aetherfin_pool.name}/attribute.aws_role/arn:aws:sts::236782813401:assumed-role/MarigoldFinOpsSaaSWorker/session"
+  member             = "principalSet://iam.googleapis.com/\${google_iam_workload_identity_pool.marigoldfin_pool.name}/attribute.aws_role/arn:aws:sts::236782813401:assumed-role/MarigoldFinOpsSaaSWorker/session"
 }`;
                 return (
                     <div className="space-y-6">
@@ -419,11 +419,11 @@ resource "google_service_account_iam_member" "wif_binding" {
                                 </p>
                                 <div className="bg-brand-surface rounded-xl border border-brand-content/5 p-4 relative font-mono text-[11px] text-indigo-400 leading-relaxed select-all">
                                     gcloud projects add-iam-policy-binding my-gcp-project \<br />
-                                    &nbsp;&nbsp;--member="serviceAccount:aetherfin-viewer-sa@my-gcp-project.iam.gserviceaccount.com" \<br />
+                                    &nbsp;&nbsp;--member="serviceAccount:marigoldfin-viewer-sa@my-gcp-project.iam.gserviceaccount.com" \<br />
                                     &nbsp;&nbsp;--role="roles/viewer" <br />
                                     <br />
                                     gcloud organizations add-iam-policy-binding my-org-id \<br />
-                                    &nbsp;&nbsp;--member="serviceAccount:aetherfin-viewer-sa@my-gcp-project.iam.gserviceaccount.com" \<br />
+                                    &nbsp;&nbsp;--member="serviceAccount:marigoldfin-viewer-sa@my-gcp-project.iam.gserviceaccount.com" \<br />
                                     &nbsp;&nbsp;--role="roles/billing.viewer"
                                 </div>
                             </div>
@@ -434,7 +434,7 @@ resource "google_service_account_iam_member" "wif_binding" {
             case 'azure_sp':
                 const azureCli = `# Step 1: Create an App Registration / Service Principal
 az ad sp create-for-rbac \\
-  --name "AetherFinCostReader" \\
+  --name "MarigoldFinCostReader" \\
   --role "Reader" \\
   --scopes "/subscriptions/YOUR_SUBSCRIPTION_ID"
 
@@ -478,16 +478,16 @@ az role assignment create \\
 
             case 'ghost_agent':
                 const daemonSetup = `# Step 1: Export your secure API Client Token
-export AETHERFIN_TOKEN="af_live_948a37fbc28d3e8e7a02db6ef93d8e58"
-export AETHERFIN_SERVER="https://aetherfin-saas-platform.com"
+export MARIGOLDFIN_TOKEN="af_live_948a37fbc28d3e8e7a02db6ef93d8e58"
+export MARIGOLDFIN_SERVER="https://marigoldfin-saas-platform.com"
 
 # Step 2: Download the production lightweight script
-curl -sSf -L $AETHERFIN_SERVER/api/agent/install.sh | bash
+curl -sSf -L $MARIGOLDFIN_SERVER/api/agent/install.sh | bash
 
 # Step 3: Launch daemon local background worker
 python3 agent.py \\
-  --server $AETHERFIN_SERVER \\
-  --token $AETHERFIN_TOKEN \\
+  --server $MARIGOLDFIN_SERVER \\
+  --token $MARIGOLDFIN_TOKEN \\
   --interval 60 \\
   --secure`;
                 return (
@@ -498,7 +498,7 @@ python3 agent.py \\
                             </div>
                             <h1 className="text-2xl font-bold tracking-tight text-brand-content">Marigold FinOps Agent.py setup</h1>
                             <p className="text-sm text-brand-content/60 leading-relaxed">
-                                The MariFinOps Agent is a lightweight python daemon designed to run within private isolated clusters. It connects directly to internal container statistics, tracking live cost profiles and real-time GPU/vCPU utilization.
+                                The MarigoldFinOps Agent is a lightweight python daemon designed to run within private isolated clusters. It connects directly to internal container statistics, tracking live cost profiles and real-time GPU/vCPU utilization.
                             </p>
                         </div>
 

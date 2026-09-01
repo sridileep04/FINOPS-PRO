@@ -84,7 +84,7 @@ export default function Integrations() {
     const [editingConnection, setEditingConnection] = useState<any | null>(null);
     const [conflictSuggestion, setConflictSuggestion] = useState<{ connectionId: string; methodLabel: string; awsAccountNumber: string } | null>(null);
 
-    const externalId = user ? `aetherfin_ext_${user.id || '8c12f11f'}` : 'aetherfin_ext_8c12f11f';
+    const externalId = user ? `marigoldfin_ext_${user.id || '8c12f11f'}` : 'marigoldfin_ext_8c12f11f';
     const aetherfinAwsAccountId = '236782813401';
 
     // AWS Integration real-time validation checks
@@ -98,7 +98,7 @@ export default function Integrations() {
     // AWS IAM role name regex: [\w+=,.@-]+ between 1 and 64 characters
     const isRoleNameValid = rawRoleName.trim().length > 0 && /^[\w+=,.@-]+$/.test(rawRoleName) && rawRoleName.length <= 64;
     // External ID must be unique, prefixed properly, non-empty, and sufficiently long
-    const isExternalIdValid = externalId.startsWith('aetherfin_ext_') && externalId.length >= 20;
+    const isExternalIdValid = externalId.startsWith('marigoldfin_ext_') && externalId.length >= 20;
 
     const accountIdError = isAccountIdTouched && !isAccountIdValid
         ? "AWS Account ID must be exactly 12 numeric digits."
@@ -191,7 +191,7 @@ export default function Integrations() {
 
     const deleteConnection = async (connectionId: string) => {
         if (!token) return;
-        if (!window.confirm('Remove this connection? Scans and cost data already collected for it are unaffected, but AetherFin will stop syncing it going forward.')) {
+        if (!window.confirm('Remove this connection? Scans and cost data already collected for it are unaffected, but MarigoldFin will stop syncing it going forward.')) {
             return;
         }
         try {
@@ -700,7 +700,7 @@ export default function Integrations() {
                                                         Secure cross-account trust architecture
                                                     </h3>
                                                     <p className="text-[11px] text-brand-content/60 leading-relaxed">
-                                                        AetherFin communicates with your AWS infrastructure securely via delegated API policies. Rather than submitting vulnerable, long-lived access keys, you define a read-only role with a customized trust relationship that exclusively permits AetherFin to analyze cost metadata.
+                                                        MarigoldFin communicates with your AWS infrastructure securely via delegated API policies. Rather than submitting vulnerable, long-lived access keys, you define a read-only role with a customized trust relationship that exclusively permits MarigoldFin to analyze cost metadata.
                                                     </p>
                                                 </div>
 
@@ -712,7 +712,7 @@ export default function Integrations() {
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                         <div className="bg-black/50 border border-brand-content/5 rounded-xl p-3 flex items-center justify-between">
                                                             <div className="space-y-0.5">
-                                                                <span className="text-[8px] font-extrabold text-brand-content/30 uppercase tracking-widest">AetherFin Account ID</span>
+                                                                <span className="text-[8px] font-extrabold text-brand-content/30 uppercase tracking-widest">MarigoldFin Account ID</span>
                                                                 <p className="text-xs font-mono font-bold text-brand-content">{aetherfinAwsAccountId}</p>
                                                             </div>
                                                             <button
@@ -736,7 +736,7 @@ export default function Integrations() {
 
                                                         <div className="bg-black/50 border border-brand-content/5 rounded-xl p-3 flex items-center justify-between">
                                                             <div className="space-y-0.5">
-                                                                <span className="text-[8px] font-extrabold text-brand-content/30 uppercase tracking-widest">AetherFin External ID</span>
+                                                                <span className="text-[8px] font-extrabold text-brand-content/30 uppercase tracking-widest">MarigoldFin External ID</span>
                                                                 <p className="text-xs font-mono font-bold text-brand-content">{externalId}</p>
                                                             </div>
                                                             <button
@@ -785,7 +785,7 @@ export default function Integrations() {
                                                     <h4 className="text-[10px] font-bold text-brand-content uppercase tracking-widest">Prerequisite Steps</h4>
                                                     <ol className="space-y-2 text-[11px] text-brand-content/60 list-decimal pl-4">
                                                         <li>Verify you have Administrative or Billing access to the AWS billing master account.</li>
-                                                        <li>Create an Amazon S3 bucket dedicated to receiving CUR reports (e.g., <code className="text-indigo-400 font-mono">aetherfin-cur-reports</code>).</li>
+                                                        <li>Create an Amazon S3 bucket dedicated to receiving CUR reports (e.g., <code className="text-indigo-400 font-mono">marigoldfin-cur-reports</code>).</li>
                                                         <li>Prepare the bucket policy in the next step to permit the AWS Billing Service to deliver data.</li>
                                                     </ol>
                                                 </div>
@@ -805,7 +805,7 @@ export default function Integrations() {
                                                     <h4 className="text-[10px] font-bold text-brand-content uppercase tracking-widest">Prerequisite Steps</h4>
                                                     <ol className="space-y-2 text-[11px] text-brand-content/60 list-decimal pl-4">
                                                         <li>Navigate to the <span className="text-indigo-400">AWS IAM Console</span>.</li>
-                                                        <li>Create an IAM User named <code className="text-indigo-400 font-mono">AetherFinCollectorUser</code>.</li>
+                                                        <li>Create an IAM User named <code className="text-indigo-400 font-mono">MarigoldFinCollectorUser</code>.</li>
                                                         <li>Under "Access Type", select "Programmatic Access" to generate an Access Key ID and Secret Access Key.</li>
                                                     </ol>
                                                 </div>
@@ -838,7 +838,7 @@ export default function Integrations() {
                                                         GCP Integrations Overview
                                                     </h3>
                                                     <p className="text-[11px] text-brand-content/60 leading-relaxed">
-                                                        AetherFin hooks into Google Cloud Platform billing exports or cloud monitoring APIs. This allows us to map GCP VM resource usage, Vertex AI training runs, and BigQuery data warehouse queries to unified FinOps dimensions.
+                                                        MarigoldFin hooks into Google Cloud Platform billing exports or cloud monitoring APIs. This allows us to map GCP VM resource usage, Vertex AI training runs, and BigQuery data warehouse queries to unified FinOps dimensions.
                                                     </p>
                                                 </div>
                                                 <div className="bg-brand-content/[0.02] border border-brand-content/5 rounded-xl p-4 space-y-2">
@@ -858,7 +858,7 @@ export default function Integrations() {
                                                         Azure Integrations Overview
                                                     </h3>
                                                     <p className="text-[11px] text-brand-content/60 leading-relaxed">
-                                                        Analyze Azure enterprise billing, Storage Account utilization, and Virtual Machine scopes by connecting Azure Cost Management to AetherFin.
+                                                        Analyze Azure enterprise billing, Storage Account utilization, and Virtual Machine scopes by connecting Azure Cost Management to MarigoldFin.
                                                     </p>
                                                 </div>
                                                 <div className="bg-brand-content/[0.02] border border-brand-content/5 rounded-xl p-4 space-y-2">
@@ -1252,10 +1252,10 @@ helm install marigold-agent marigoldfinops/agent \\
                                                     <div className="space-y-1.5">
                                                         <span className="text-[9px] font-bold text-brand-content/40 uppercase tracking-widest">Collector Service Account</span>
                                                         <div className="flex items-center justify-between bg-black/50 border border-brand-content/5 rounded-lg p-2.5">
-                                                            <span className="font-mono text-xs text-indigo-300">billing-collector@aetherfin.iam.gserviceaccount.com</span>
+                                                            <span className="font-mono text-xs text-indigo-300">billing-collector@marigoldfin.iam.gserviceaccount.com</span>
                                                             <button
                                                                 type="button"
-                                                                onClick={() => copyToClipboard('billing-collector@aetherfin.iam.gserviceaccount.com', 'sa_cop')}
+                                                                onClick={() => copyToClipboard('billing-collector@marigoldfin.iam.gserviceaccount.com', 'sa_cop')}
                                                                 className="p-1 hover:bg-brand-content/10 rounded-md text-brand-content/40 hover:text-brand-content transition-colors"
                                                             >
                                                                 {copiedField === 'sa_cop' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1274,16 +1274,16 @@ helm install marigold-agent marigoldfinops/agent \\
                                                 <div className="space-y-1">
                                                     <h3 className="text-xs font-bold text-brand-content uppercase tracking-wider">Configure Workload Identity Pool</h3>
                                                     <p className="text-[11px] text-brand-content/60 leading-relaxed">
-                                                        Establish a trust mapping to exchange AetherFin OIDC federation claims for GCP access tokens.
+                                                        Establish a trust mapping to exchange MarigoldFin OIDC federation claims for GCP access tokens.
                                                     </p>
                                                 </div>
                                                 <div className="space-y-1.5">
-                                                    <span className="text-[9px] font-bold text-brand-content/40 uppercase tracking-widest">AetherFin OIDC Issuer Endpoint</span>
+                                                    <span className="text-[9px] font-bold text-brand-content/40 uppercase tracking-widest">MarigoldFin OIDC Issuer Endpoint</span>
                                                     <div className="flex items-center justify-between bg-black/50 border border-brand-content/5 rounded-lg p-2.5">
-                                                        <span className="font-mono text-xs text-indigo-300">https://auth.aetherfin.com/oidc/8c12f11f</span>
+                                                        <span className="font-mono text-xs text-indigo-300">https://auth.marigoldfin.com/oidc/8c12f11f</span>
                                                         <button
                                                             type="button"
-                                                            onClick={() => copyToClipboard('https://auth.aetherfin.com/oidc/8c12f11f', 'oidc_cop')}
+                                                            onClick={() => copyToClipboard('https://auth.marigoldfin.com/oidc/8c12f11f', 'oidc_cop')}
                                                             className="p-1 hover:bg-brand-content/10 rounded-md text-brand-content/40 hover:text-brand-content transition-colors"
                                                         >
                                                             {copiedField === 'oidc_cop' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1303,7 +1303,7 @@ helm install marigold-agent marigoldfinops/agent \\
                                                     </p>
                                                 </div>
                                                 <div className="bg-brand-content/[0.02] border border-brand-content/5 rounded-xl p-4 space-y-2 text-[11px] text-brand-content/60">
-                                                    <p>1. In GCP IAM & Admin, create a Service Account named <code className="text-indigo-400 font-mono">aetherfin-collector</code>.</p>
+                                                    <p>1. In GCP IAM & Admin, create a Service Account named <code className="text-indigo-400 font-mono">marigoldfin-collector</code>.</p>
                                                     <p>2. Assign the <strong className="text-brand-content">Billing Account Viewer</strong> role to the service account on your billing account.</p>
                                                     <p>3. Click <span className="text-indigo-400 font-bold">Keys &gt; Add Key &gt; Create New Key</span> and select <strong className="text-brand-content">JSON</strong>. Download the generated file.</p>
                                                 </div>
@@ -1331,7 +1331,7 @@ helm install marigold-agent marigoldfinops/agent \\
                                                     </p>
                                                 </div>
                                                 <div className="bg-brand-content/[0.02] border border-brand-content/5 rounded-xl p-4 space-y-2 text-[11px] text-brand-content/60">
-                                                    <p>1. In Microsoft Entra ID (Azure AD), go to <span className="text-indigo-400 font-bold">App Registrations &gt; New Registration</span> named "AetherFin Reader".</p>
+                                                    <p>1. In Microsoft Entra ID (Azure AD), go to <span className="text-indigo-400 font-bold">App Registrations &gt; New Registration</span> named "MarigoldFin Reader".</p>
                                                     <p>2. Under <span className="text-indigo-400 font-bold">Certificates & secrets</span>, generate a new client secret and copy its value.</p>
                                                     <p>3. Go to your subscription's Access Control (IAM) page and assign the <strong className="text-brand-content">Cost Management Reader</strong> role to this app registration.</p>
                                                 </div>
@@ -1393,7 +1393,7 @@ helm install marigold-agent marigoldfinops/agent \\
                                                                 setFormData({
                                                                     ...formData,
                                                                     accountId: val,
-                                                                    roleArn: `arn:aws:iam::${val}:role/${formData.roleName || 'AetherFinReadOnlyRole'}`
+                                                                    roleArn: `arn:aws:iam::${val}:role/${formData.roleName || 'MarigoldFinReadOnlyRole'}`
                                                                 });
                                                             }}
                                                             placeholder="123456789012"
@@ -1452,7 +1452,7 @@ helm install marigold-agent marigoldfinops/agent \\
                                                                     roleArn: `arn:aws:iam::${formData.accountId || '123456789012'}:role/${val}`
                                                                 });
                                                             }}
-                                                            placeholder="AetherFinReadOnlyRole"
+                                                            placeholder="MarigoldFinReadOnlyRole"
                                                             className={`w-full bg-black/50 border rounded-lg px-3 py-2 text-xs text-brand-content focus:outline-none focus:border-indigo-500/50 transition-colors ${roleNameError
                                                                 ? 'border-red-500/50 focus:border-red-500/80 bg-red-500/5'
                                                                 : isRoleNameValid
@@ -1499,7 +1499,7 @@ helm install marigold-agent marigoldfinops/agent \\
                                                             <ul className="space-y-1.5">
                                                                 <li className="flex items-start gap-1.5 text-[10px] text-brand-content/60">
                                                                     <span className="text-emerald-400 shrink-0 mt-0.5">✓</span>
-                                                                    <span><strong>Confused Deputy Protection:</strong> AWS security handshake strictly validates that this role is only assumed by AetherFin matching your tenant identifier.</span>
+                                                                    <span><strong>Confused Deputy Protection:</strong> AWS security handshake strictly validates that this role is only assumed by MarigoldFin matching your tenant identifier.</span>
                                                                 </li>
                                                             </ul>
                                                         </div>

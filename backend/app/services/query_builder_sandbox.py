@@ -47,13 +47,13 @@ _ROWS: dict[str, list[dict[str, Any]]] = {
          "create_time": "2025-06-30T08:12:00Z", "tag_name": None},
     ],
     "s3_bucket": [
-        {"name": "aetherfin-prod-uploads", "region": "us-east-1", "creation_date": "2024-11-02T00:00:00Z",
+        {"name": "Marigoldfin-prod-uploads", "region": "us-east-1", "creation_date": "2024-11-02T00:00:00Z",
          "versioning_enabled": True, "bucket_policy_is_public": False},
-        {"name": "aetherfin-public-assets", "region": "us-east-1", "creation_date": "2025-01-14T00:00:00Z",
+        {"name": "Marigoldfin-public-assets", "region": "us-east-1", "creation_date": "2025-01-14T00:00:00Z",
          "versioning_enabled": False, "bucket_policy_is_public": True},
-        {"name": "aetherfin-legacy-backups", "region": "eu-west-1", "creation_date": "2023-04-30T00:00:00Z",
+        {"name": "Marigoldfin-legacy-backups", "region": "eu-west-1", "creation_date": "2023-04-30T00:00:00Z",
          "versioning_enabled": False, "bucket_policy_is_public": False},
-        {"name": "aetherfin-ml-datasets", "region": "us-west-2", "creation_date": "2025-08-20T00:00:00Z",
+        {"name": "Marigoldfin-ml-datasets", "region": "us-west-2", "creation_date": "2025-08-20T00:00:00Z",
          "versioning_enabled": True, "bucket_policy_is_public": False},
     ],
     "rds_instance": [

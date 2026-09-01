@@ -181,7 +181,7 @@ export default function ResourceExplorer() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.setAttribute('download', `aetherfin_resources_${selectedDate}.csv`);
+        link.setAttribute('download', `marigoldfin_resources_${selectedDate}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -191,7 +191,7 @@ export default function ResourceExplorer() {
         const doc = new jsPDF('landscape');
 
         doc.setFontSize(16);
-        doc.text('AetherFin Resource Explorer Report', 14, 15);
+        doc.text('MarigoldFin Resource Explorer Report', 14, 15);
         doc.setFontSize(10);
         doc.text(`Date: ${selectedDate}`, 14, 22);
 
@@ -218,7 +218,7 @@ export default function ResourceExplorer() {
             headStyles: { fillColor: [41, 41, 61] } // Matches dark theme slightly
         });
 
-        doc.save(`aetherfin_resources_${selectedDate}.pdf`);
+        doc.save(`marigoldfin_resources_${selectedDate}.pdf`);
     };
 
     return (

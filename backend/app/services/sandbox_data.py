@@ -182,10 +182,10 @@ def resources() -> list[dict]:
             "lifecycleStatus": "active", "activeSince": "2026-07-08T00:00:00Z",
         },
         {
-            "id": "aetherfin-logs-archive-bucket", "name": "aetherfin-logs-archive-bucket", "provider": "AWS", "type": "S3",
+            "id": "Marigoldfin-logs-archive-bucket", "name": "Marigoldfin-logs-archive-bucket", "provider": "AWS", "type": "S3",
             "region": "us-east-1", "status": "healthy", "environment": "production",
             "mtdCost": 49.10, "estimatedMonthlyCost": 64.80,
-            "dailyCosts": {today: 2.16}, "tags": {"Name": "aetherfin-logs-archive-bucket", "ManagedBy": "terraform"},
+            "dailyCosts": {today: 2.16}, "tags": {"Name": "-logs-archive-bucket", "ManagedBy": "terraform"},
             "lifecycleStatus": "active", "activeSince": "2026-03-01T00:00:00Z",
         },
         {
@@ -286,7 +286,7 @@ def budgets() -> list[dict]:
         {
             "id": "sandbox-budget-1", "name": "Production Monthly Budget", "limit_amount": 1200.00,
             "alert_threshold": 0.8, "current_spend": current_spend,
-            "notification_email": "sandbox@aetherfin.com", "department": "Engineering",
+            "notification_email": "sandbox@marigoldfin.com", "department": "Engineering",
         },
     ]
 
@@ -295,7 +295,7 @@ def alerts() -> list[dict]:
     return [
         {
             "id": "sandbox-alert-1", "name": "Daily spend spike", "metric": "daily_spend", "threshold": 500.0,
-            "email_enabled": True, "push_enabled": False, "notification_email": "sandbox@aetherfin.com",
+            "email_enabled": True, "push_enabled": False, "notification_email": "sandbox@marigoldfin.com",
             "created_at": "2026-07-01T00:00:00Z",
         },
     ]
@@ -304,7 +304,7 @@ def alerts() -> list[dict]:
 def team() -> list[dict]:
     return [
         {
-            "id": "sandbox", "name": "Sandbox Explorer", "email": "sandbox@aetherfin.com",
+            "id": "sandbox", "name": "Sandbox Explorer", "email": "sandbox@marigoldfin.com",
             "role": "admin", "is_active": True, "created_at": "2026-01-01T00:00:00Z",
         },
     ]
