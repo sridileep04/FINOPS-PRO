@@ -41,7 +41,6 @@ def test_liveness_endpoint_matches_documented_schema(case):
     response = case.call()
     case.validate_response(response)
 
-
 def test_readiness_endpoint_returns_well_formed_response_on_dependency_failure():
     """/health/ready's OpenAPI schema only documents a 200 response
     (FastAPI infers documented status codes from the route's

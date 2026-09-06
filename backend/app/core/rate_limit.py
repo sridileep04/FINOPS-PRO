@@ -14,6 +14,16 @@ _redis: Redis | None = None
 
 def _get_redis() -> Redis:
     global _redis
+    # If the global client exists but its event loop is closed, reset it
+    if _redis is not None:
+        try:
+            # Check if event loop is running/closed if accessible, 
+            # or recreate it to avoid stale loop bindings.
+            if _redis.connection_pool and _redis.connection_pool.is_closed:
+                _redis = None
+        except Exception:
+            _redis = None
+
     if _redis is None:
         _redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
     return _redis

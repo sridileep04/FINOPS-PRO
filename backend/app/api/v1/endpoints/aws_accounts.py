@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_active_admin, get_current_user
+from app.api.deps import forbid_sandbox_mutation, get_current_active_admin, get_current_user
 from app.db.session import get_db
 from app.models.aws_account import AwsAccount, ValidationStatus
 from app.models.user import User
@@ -34,7 +34,7 @@ async def create_aws_account(
     payload: AwsAccountCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_active_admin),
+    user: User = Depends(forbid_sandbox_mutation),
 ):
     """Accepts either of the 2 UI options: cross_account_role or
     access_keys (see AwsAccountCreate for the fields each requires).
@@ -102,7 +102,7 @@ async def get_aws_account(account_id: uuid.UUID, db: AsyncSession = Depends(get_
 async def revalidate_aws_account(
     account_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_active_admin),
+    user: User = Depends(forbid_sandbox_mutation),
 ):
     account = await _get_owned_account(db, user, account_id)
     ok, message = await steampipe_client.validate_account(account)
@@ -118,7 +118,7 @@ async def revalidate_aws_account(
 async def check_account_permissions(
     account_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_active_admin),
+    user: User = Depends(forbid_sandbox_mutation),
 ):
     """Runs the full capability probe synchronously (a handful of cheap,
     read-only AWS calls -- typically 2-5 seconds) and returns the report
@@ -160,7 +160,7 @@ async def get_account_permissions(
 async def delete_aws_account(
     account_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_active_admin),
+    user: User = Depends(forbid_sandbox_mutation),
 ):
     account = await _get_owned_account(db, user, account_id)
     await db.delete(account)

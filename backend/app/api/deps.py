@@ -57,10 +57,21 @@ async def get_current_active_admin(user: User = Depends(get_current_user)) -> Us
     return user
 
 
-async def forbid_sandbox_mutation(user: User = Depends(get_current_user)) -> User:
+async def forbid_sandbox_mutation(user: User = Depends(get_current_active_admin)) -> User:
     """Blocks write actions (connecting/editing/deleting integrations,
-    triggering scans) for the shared public sandbox user -- purely a
-    token-attribute check, no database lookup."""
+    triggering scans, budgets/alerts/team/platform settings, etc.) for
+    the shared public sandbox user -- purely a token-attribute check,
+    no database lookup.
+
+    Chains off get_current_active_admin (not get_current_user) so every
+    mutation endpoint gets BOTH checks -- "is an admin" and "is not the
+    sandbox account" -- from one dependency. SANDBOX_USER.is_customer_admin
+    is True (the sandbox account is presented as a full admin in the UI),
+    so get_current_active_admin alone does NOT block it -- this is the
+    only thing that does, which is why every mutation endpoint in this
+    codebase must depend on THIS function, not get_current_active_admin
+    directly.
+    """
     if getattr(user, "is_sandbox", False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -4,14 +4,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
   ENVIRONMENT: str = "production"
-  # Auto-creates the two demo accounts advertised on the login screen
-  # (admin@ghostfinops.com / viewer@ghostfinops.com, both password123)
-  # on startup if they don't exist yet. Defaults to on outside of
-  # production so the login page's advertised credentials actually work
-  # out of the box in dev/staging; explicitly False by default in prod
-  # so nobody ships a well-known default login to real users. Override
-  # either way with SEED_DEMO_USERS=true/false in .env.
-  # SEED_DEMO_USERS: bool | None = None
+  # Explicit override for LOG_FORMAT; leave unset (None) to get the
+  # sensible default -- console in dev, json in production -- via the
+  # effective_log_format property below. Set LOG_FORMAT=console/json in
+  # .env to force one or the other regardless of ENVIRONMENT.
+  LOG_FORMAT: str | None = None
+  LOG_LEVEL: str = "INFO"
 
   # --- Database Settings ---
   DB_USER: str
@@ -84,6 +82,16 @@ class Settings(BaseSettings):
   @property
   def cors_is_wildcard_in_production(self) -> bool:
     return self.ENVIRONMENT == "production" and self.CORS_ORIGINS == "*"
+
+  @property
+  def effective_log_format(self) -> str:
+    """"console" (human-readable, colorized) or "json" (one JSON object
+    per line -- for CloudWatch/Datadog/Loki/etc). If LOG_FORMAT wasn't
+    explicitly set, defaults to json in production (log aggregators
+    expect this) and console everywhere else (readable in a terminal)."""
+    if self.LOG_FORMAT is not None:
+      return self.LOG_FORMAT
+    return "json" if self.ENVIRONMENT == "production" else "console"
 
   # @property
   # def should_seed_demo_users(self) -> bool:

@@ -25,6 +25,12 @@ pytest tests/unit --cov=app --cov-report=term-missing   # with coverage
 ```
 pytest tests/integration -v -m integration
 ```
+## If there are any diselected use below command to know and run
+```
+pytest tests/integration --collect-only -m "not integration"
+or
+pytest tests/integration --collect-only
+```
 
 # 3.API Contract/Fuzz Tests (Schemathesis)
 

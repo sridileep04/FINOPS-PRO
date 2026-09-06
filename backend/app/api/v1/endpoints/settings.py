@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_active_admin, get_current_user
+from app.api.deps import forbid_sandbox_mutation, get_current_active_admin, get_current_user
 from app.core.security import create_access_token, hash_password
 from app.db.session import get_db
 from app.models.bff import AlertRule, Budget
@@ -86,7 +86,7 @@ async def list_budgets(db: AsyncSession = Depends(get_db), user: User = Depends(
 
 
 @router.post("/budgets")
-async def create_budget(payload: BudgetRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def create_budget(payload: BudgetRequest, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if _is_sandbox(user):
         raise _SANDBOX_BLOCKED
     budget = Budget(customer_id=user.customer_id, **payload.model_dump())
@@ -96,7 +96,7 @@ async def create_budget(payload: BudgetRequest, db: AsyncSession = Depends(get_d
 
 
 @router.put("/budgets/{budget_id}")
-async def update_budget(budget_id: uuid.UUID, payload: BudgetRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def update_budget(budget_id: uuid.UUID, payload: BudgetRequest, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if _is_sandbox(user):
         raise _SANDBOX_BLOCKED
     result = await db.execute(select(Budget).where(Budget.id == budget_id, Budget.customer_id == user.customer_id))
@@ -110,7 +110,7 @@ async def update_budget(budget_id: uuid.UUID, payload: BudgetRequest, db: AsyncS
 
 
 @router.delete("/budgets/{budget_id}")
-async def delete_budget(budget_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def delete_budget(budget_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if _is_sandbox(user):
         raise _SANDBOX_BLOCKED
     result = await db.execute(select(Budget).where(Budget.id == budget_id, Budget.customer_id == user.customer_id))
@@ -146,7 +146,7 @@ async def list_alerts(db: AsyncSession = Depends(get_db), user: User = Depends(g
 
 
 @router.post("/alerts")
-async def create_alert(payload: AlertRuleRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def create_alert(payload: AlertRuleRequest, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if _is_sandbox(user):
         raise _SANDBOX_BLOCKED
     alert = AlertRule(customer_id=user.customer_id, **payload.model_dump())
@@ -156,7 +156,7 @@ async def create_alert(payload: AlertRuleRequest, db: AsyncSession = Depends(get
 
 
 @router.put("/alerts/{alert_id}")
-async def update_alert(alert_id: uuid.UUID, payload: AlertRuleRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def update_alert(alert_id: uuid.UUID, payload: AlertRuleRequest, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if _is_sandbox(user):
         raise _SANDBOX_BLOCKED
     result = await db.execute(select(AlertRule).where(AlertRule.id == alert_id, AlertRule.customer_id == user.customer_id))
@@ -170,7 +170,7 @@ async def update_alert(alert_id: uuid.UUID, payload: AlertRuleRequest, db: Async
 
 
 @router.delete("/alerts/{alert_id}")
-async def delete_alert(alert_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def delete_alert(alert_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if _is_sandbox(user):
         raise _SANDBOX_BLOCKED
     result = await db.execute(select(AlertRule).where(AlertRule.id == alert_id, AlertRule.customer_id == user.customer_id))
@@ -215,7 +215,7 @@ async def list_team(db: AsyncSession = Depends(get_db), user: User = Depends(get
 
 
 @router.post("/team")
-async def invite_team_member(payload: TeamInviteRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def invite_team_member(payload: TeamInviteRequest, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if _is_sandbox(user):
         raise _SANDBOX_BLOCKED
     existing = await db.execute(select(User).where(User.email == payload.email))
@@ -234,7 +234,7 @@ async def invite_team_member(payload: TeamInviteRequest, db: AsyncSession = Depe
 
 
 @router.put("/team/{member_id}/role")
-async def update_member_role(member_id: uuid.UUID, payload: TeamRoleUpdateRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def update_member_role(member_id: uuid.UUID, payload: TeamRoleUpdateRequest, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if _is_sandbox(user):
         raise _SANDBOX_BLOCKED
     if payload.role not in ("admin", "viewer"):
@@ -251,7 +251,7 @@ async def update_member_role(member_id: uuid.UUID, payload: TeamRoleUpdateReques
 
 
 @router.delete("/team/{member_id}")
-async def remove_team_member(member_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def remove_team_member(member_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if _is_sandbox(user):
         raise _SANDBOX_BLOCKED
     if member_id == user.id:
@@ -279,7 +279,7 @@ async def get_platform(db: AsyncSession = Depends(get_db), user: User = Depends(
 
 
 @router.post("/platform")
-async def save_platform(payload: PlatformSettingsRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def save_platform(payload: PlatformSettingsRequest, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if _is_sandbox(user):
         raise _SANDBOX_BLOCKED
     await upsert_platform_settings(db, user.customer_id, payload.settings)

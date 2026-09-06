@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_active_admin, get_current_user
+from app.api.deps import forbid_sandbox_mutation, get_current_active_admin, get_current_user
 from app.db.session import get_db
 from app.models.bff import FeatureFlag
 from app.models.user import User
@@ -78,7 +78,7 @@ async def _get_feature(db: AsyncSession, user: User, feature_id: str) -> Feature
 
 
 @router.post("/{feature_id}/toggle")
-async def toggle_feature(feature_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_admin)):
+async def toggle_feature(feature_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(forbid_sandbox_mutation)):
     if getattr(user, "is_sandbox", False):
         raise HTTPException(status_code=403, detail="This is a shared read-only sandbox -- actions can't be applied here.")
     feature = await _get_feature(db, user, feature_id)
@@ -90,7 +90,7 @@ async def toggle_feature(feature_id: str, db: AsyncSession = Depends(get_db), us
 @router.post("/{feature_id}/config")
 async def update_feature_config(
     feature_id: str, payload: FeatureConfigRequest, db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_active_admin),
+    user: User = Depends(forbid_sandbox_mutation),
 ):
     if getattr(user, "is_sandbox", False):
         raise HTTPException(status_code=403, detail="This is a shared read-only sandbox -- actions can't be applied here.")

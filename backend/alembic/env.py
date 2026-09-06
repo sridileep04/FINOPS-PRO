@@ -1,3 +1,4 @@
+import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -12,7 +13,11 @@ from app.db.base import Base  # noqa: E402
 from app import models  # noqa: E402,F401  -- imports all models so Base.metadata is populated
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.SYNC_DATABASE_URL)
+
+# Prefer testcontainers environment variables if they exist (during pytest), 
+# otherwise fallback gracefully to standard application settings (production/local dev).
+db_url = os.getenv("SYNC_DATABASE_URL") or os.getenv("DATABASE_URL") or settings.SYNC_DATABASE_URL
+config.set_main_option("sqlalchemy.url", db_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
