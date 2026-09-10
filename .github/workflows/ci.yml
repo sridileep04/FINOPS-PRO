@@ -66,6 +66,16 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # Postgres is handled separately, via testcontainers spinning up its own
+    # disposable pgvector/pgvector:pg16 container (see note above). Redis is
+    # NOT something testcontainers provisions here, but app/core/rate_limit.py
+    # (hit by the login/signup endpoints these tests exercise) needs a real
+    # Redis to talk to -- without this `services:` block those requests throw
+    # redis.exceptions.ConnectionError and every auth-API test here fails.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
     steps:
       - uses: actions/checkout@v4
 
@@ -84,6 +94,7 @@ jobs:
           # testcontainers-python reads this to know it's safe to talk to
           # the Docker daemon on a CI runner without extra ceremony.
           TESTCONTAINERS_RYUK_DISABLED: 'false'
+          REDIS_URL: redis://localhost:6379/0
 
   # ===========================================================================
   # Frontend unit/component tests (Vitest + React Testing Library).
@@ -228,19 +239,19 @@ jobs:
         run: docker build -t finops-steampipe:${{ github.sha }} ./steampipe
 
       - name: Trivy scan -- backend image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: finops-backend:${{ github.sha }}
           trivy-config: trivy.yaml
 
       - name: Trivy scan -- frontend image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: finops-frontend:${{ github.sha }}
           trivy-config: trivy.yaml
 
       - name: Trivy scan -- steampipe-service image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: finops-steampipe:${{ github.sha }}
           trivy-config: trivy.yaml
@@ -409,7 +420,10 @@ jobs:
         working-directory: backend
         run: |
           nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
-          npx --yes wait-on@7 -t 30000 http://localhost:8000/health
+          # 90s, not 30s: this app's import chain pulls in langgraph/onnxruntime/
+          # fastembed, which pushes cold-start past 30s on a CI runner. On
+          # failure, print backend.log so a timeout is never a silent black box.
+          npx --yes wait-on@7 -t 90000 http://localhost:8000/health || { echo "--- backend.log ---"; cat backend.log; exit 1; }
 
       - name: Install k6
         run: |
@@ -484,7 +498,10 @@ jobs:
         working-directory: backend
         run: |
           nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 > backend.log 2>&1 &
-          npx --yes wait-on@7 -t 30000 http://localhost:8000/health
+          # 90s, not 30s: this app's import chain pulls in langgraph/onnxruntime/
+          # fastembed, which pushes cold-start past 30s on a CI runner. On
+          # failure, print backend.log so a timeout is never a silent black box.
+          npx --yes wait-on@7 -t 90000 http://localhost:8000/health || { echo "--- backend.log ---"; cat backend.log; exit 1; }
 
       - name: Install k6
         run: |

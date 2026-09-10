@@ -84,6 +84,8 @@ npm test                 # headless, all 3 browsers
 npm run test:headed      # watch it click through an actual browser window
 npm run test:ui          # Playwright's interactive debugging UI
 npm run report           # view the HTML report after a run
+npx playwright install --with-deps chromium # only with chromium browser
+npx playwright test --project=chromium --headed
 ```
 
 # 6.Performance Testing (k6)

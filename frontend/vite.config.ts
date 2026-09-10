@@ -25,16 +25,29 @@ export default defineConfig(() => {
     build: {
       outDir: fileURLToPath(new URL("./dist", import.meta.url)),
       emptyOutDir: true,
+      chunkSizeWarningLimit: 200,
       rollupOptions: {
         output: {
-          manualChunks: {
-            // Split vendor dependencies into separate chunks
-            vendor: ['react', 'react-dom', 'react-router-dom'],
-            charts: ['echarts', 'echarts-for-react'],
-            motion: ['motion/react'],
-            icons: ['lucide-react'],
+          // Rolldown (used by this Vite version) requires manualChunks to
+          // be a function, not the old Rollup-style { chunkName: [ids] }
+          // object -- return a chunk name to group a module into it, or
+          // undefined/nothing to let Rolldown decide.
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (/[\\/](react|react-dom|react-router-dom)[\\/]/.test(id)) {
+                return 'vendor';
+              }
+              if (/[\\/](echarts|echarts-for-react)[\\/]/.test(id)) {
+                return 'charts';
+              }
+              if (id.includes('motion')) {
+                return 'motion';
+              }
+              if (id.includes('lucide-react')) {
+                return 'icons';
+              }
+            }
           },
-          chunkSizeWarningLimit: 200,
         }
       }
     }
