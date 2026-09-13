@@ -1,0 +1,27 @@
+# Hadolint config -- picked up automatically by hadolint-action's default
+# `config: ./.hadolint.yaml` input, so this applies to all three
+# "Hadolint (... Dockerfile)" steps in .github/workflows/ci.yml.
+#
+# hadolint-action's own default failure-threshold is "info", i.e. it
+# fails the job on ANY finding, warnings included -- so a single
+# unaddressed DL3008 fails the whole Security job (and blocks every
+# step after it: the Docker builds, all three Trivy scans, etc).
+#
+# ignored:
+#   DL3008 - "Pin versions in apt-get install". Deliberately not
+#            actioned: the Trivy container-scan step in the same job
+#            exists specifically to build every image fresh and catch
+#            newly-disclosed CVEs in the base image / its packages on
+#            every run (see the "security posture" comment block at
+#            the top of docker-compose.yml and the Security job's own
+#            header comment in ci.yml). Hard-pinning curl/ca-certificates/
+#            tar/python3/python3-pip to exact Debian package versions
+#            would work against that goal -- it freezes in whatever
+#            (possibly already-vulnerable) build existed on the day the
+#            pin was written, and a stale pin silently breaks the build
+#            once Debian's bookworm-slim repo rotates that exact version
+#            out. CVE coverage for these packages already comes from
+#            Trivy scanning the built image, so this rule is a
+#            reviewed trade-off, not an oversight.
+ignored:
+  - DL3008

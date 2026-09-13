@@ -294,6 +294,9 @@ jobs:
           ENVIRONMENT=development
           SEED_DEMO_USERS=true
           CORS_ORIGINS=*
+          RATE_LIMIT_LOGIN_MAX=1000
+          RATE_LIMIT_SIGNUP_MAX=1000
+          LOGIN_LOCKOUT_THRESHOLD=1000
           EOF
 
       - name: Build and start the full stack (prod-shaped compose, no dev override)
@@ -396,6 +399,7 @@ jobs:
       STEAMPIPE_SERVICE_TOKEN: ci-perf-steampipe-token
       ENVIRONMENT: development
       SEED_DEMO_USERS: 'true'
+      RATE_LIMIT_LOGIN_MAX: '1000000'
     steps:
       - uses: actions/checkout@v4
 
@@ -474,6 +478,7 @@ jobs:
       STEAMPIPE_SERVICE_TOKEN: ci-perf-steampipe-token
       ENVIRONMENT: development
       SEED_DEMO_USERS: 'true'
+      RATE_LIMIT_LOGIN_MAX: '1000000'
     steps:
       - uses: actions/checkout@v4
 
