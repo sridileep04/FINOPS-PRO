@@ -50,15 +50,21 @@ services:
     <<: *hardening
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      # Pass your existing env vars for safety, but map them to what Postgres expects:
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+      
+      # Keep these if your internal application code reads DB_USER instead of POSTGRES_USER:
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - data-plane
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      test: ['CMD-SHELL', 'pg_isready -U $${DB_USER} -d $${DB_NAME}']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -72,6 +78,18 @@ services:
   redis:
     image: redis:7-alpine
     <<: *hardening
+    # The official redis image's entrypoint starts as root, runs `chown`
+    # on /data, then steps down to the unprivileged `redis` user via
+    # gosu/su-exec before exec'ing redis-server -- see
+    # github.com/docker-library/redis/issues/175. Under our blanket
+    # `cap_drop: ALL` (from *hardening) none of that can happen, so the
+    # container never finishes starting and the healthcheck below just
+    # times out ("redis-1 is unhealthy"). Re-grant only the 3 caps that
+    # specific startup sequence needs; nothing broader.
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
     restart: unless-stopped
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
@@ -103,10 +121,10 @@ services:
     networks:
       - data-plane # NOT app-plane -- only the backend talks to this, never the frontend/internet directly
     healthcheck:
-      test: ['CMD', 'curl', '-fsS', 'http://localhost:8001/health']
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 15s
       timeout: 5s
-      start_period: 30s
+      start_period: 15s
       retries: 3
 
   backend:
@@ -116,9 +134,9 @@ services:
     restart: unless-stopped
     command: ['uvicorn-server']
     environment:
-      DB_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_URL: redis://redis:6379/0
@@ -160,9 +178,9 @@ services:
     restart: unless-stopped
     command: ['celery-worker']
     environment:
-      DB_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_URL: redis://redis:6379/0
@@ -191,11 +209,11 @@ services:
       context: ./backend
     <<: *hardening
     restart: unless-stopped
-    command: ['celery-beat']
+    command: ['celery', '-A', 'app.tasks.celery_app:celery_app', 'beat', '--schedule=/tmp/celerybeat-schedule']
     environment:
-      DB_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_URL: redis://redis:6379/0
@@ -220,14 +238,14 @@ services:
     <<: *hardening
     restart: unless-stopped
     ports:
-      - '80:8080' # the only port this stack exposes to the host by default
+      - '80:3000' # the only port this stack exposes to the host by default
     networks:
       - app-plane
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:8080/']
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/']
       interval: 15s
       timeout: 5s
       retries: 3
