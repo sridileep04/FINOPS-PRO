@@ -151,6 +151,15 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       API_WORKERS: ${API_WORKERS:-2}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      # Defaults match app/core/config.py's own Settings defaults, so
+      # production behaviour is unchanged unless a caller (e.g. CI) sets
+      # these in .env -- see the "Write CI .env" step in ci.yml's e2e
+      # job, which raises them so a 42-test/3-browser Playwright run
+      # doesn't trip per-IP brute-force protection sized for real
+      # attackers, not test suites.
+      RATE_LIMIT_LOGIN_MAX: ${RATE_LIMIT_LOGIN_MAX:-10}
+      RATE_LIMIT_SIGNUP_MAX: ${RATE_LIMIT_SIGNUP_MAX:-5}
+      LOGIN_LOCKOUT_THRESHOLD: ${LOGIN_LOCKOUT_THRESHOLD:-5}
     networks:
       - data-plane # to reach postgres/redis/steampipe-service
       - app-plane # to be reached by frontend, and to call out to Groq/AWS
