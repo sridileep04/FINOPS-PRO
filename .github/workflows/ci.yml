@@ -238,23 +238,42 @@ jobs:
       - name: Build steampipe-service image
         run: docker build -t finops-steampipe:${{ github.sha }} ./steampipe
 
+      # trivy-config alone isn't enough: trivy-action always passes its own
+      # ignore-unfixed/severity/exit-code *inputs* to the trivy CLI, and
+      # those default to ignore-unfixed=false and severity=<all> regardless
+      # of what trivy.yaml says -- a long-standing trivy-action behaviour
+      # (aquasecurity/trivy-action#147), not a trivy.yaml bug. Without
+      # these three set explicitly here, trivy.yaml's intent (HIGH/CRITICAL
+      # only, skip findings with no fix available) is silently overridden,
+      # and every OS-level CVE with no upstream fix yet (e.g. the
+      # python-ecdsa Minerva timing attack, which its maintainers have said
+      # they won't fix) fails the build forever.
       - name: Trivy scan -- backend image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: finops-backend:${{ github.sha }}
           trivy-config: trivy.yaml
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
 
       - name: Trivy scan -- frontend image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: finops-frontend:${{ github.sha }}
           trivy-config: trivy.yaml
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
 
       - name: Trivy scan -- steampipe-service image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: finops-steampipe:${{ github.sha }}
           trivy-config: trivy.yaml
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
 
   # ===========================================================================
   # End-to-end tests (Playwright) against the real, full docker-composed
@@ -423,7 +442,14 @@ jobs:
       - name: Start backend API (background)
         working-directory: backend
         run: |
-          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
+          # --workers 2 to match production (docker-entrypoint.sh's
+          # API_WORKERS default -- see backend/Dockerfile). A bare
+          # single-process dev server here means the app's one event
+          # loop has to fully absorb this test's ~970 req/s alone, which
+          # causes ~3% connection resets under load that don't reflect
+          # how this actually runs in production and fail the
+          # http_req_failed<1% threshold on a healthy backend.
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 > backend.log 2>&1 &
           # 90s, not 30s: this app's import chain pulls in langgraph/onnxruntime/
           # fastembed, which pushes cold-start past 30s on a CI runner. On
           # failure, print backend.log so a timeout is never a silent black box.
