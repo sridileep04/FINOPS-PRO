@@ -23,5 +23,20 @@
 #            out. CVE coverage for these packages already comes from
 #            Trivy scanning the built image, so this rule is a
 #            reviewed trade-off, not an oversight.
+#   DL3005 - "Do not use apt-get upgrade or dist-upgrade". Its own stated
+#            rationale is "updates will be baked into the base images, so
+#            you don't need to run apt-get upgrade" -- which is exactly
+#            backwards for this repo: a freshly-disclosed CVE in a
+#            package that's already part of python:3.12-slim / debian:
+#            bookworm-slim (gzip, perl-base, libsqlite3-0, libpcre2-8-0,
+#            etc.) ships regardless of pinning the base image tag, until
+#            Docker Hub gets around to rebuilding that tag. `apt-get
+#            upgrade` in backend/Dockerfile and steampipe/Dockerfile is
+#            what actually closes that gap on every build, independent of
+#            Docker Hub's rebuild cadence -- see the comment next to each
+#            apt-get line. Removing it to satisfy DL3005 would silently
+#            reopen exactly the class of finding the Security job's
+#            Trivy step exists to catch.
 ignored:
   - DL3008
+  - DL3005
