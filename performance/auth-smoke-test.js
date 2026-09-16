@@ -14,7 +14,7 @@
  *   k6 run perf/auth-smoke-test.js
  */
 import http from 'k6/http';
-import { check } from 'k6';
+import { check, sleep } from 'k6';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8000';
 
@@ -38,4 +38,5 @@ export default function () {
         'status is 200': (r) => r.status === 200,
         'response has a token': (r) => !!r.json('token'),
     });
+    sleep(0.1);
 }

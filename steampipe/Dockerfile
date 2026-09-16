@@ -36,6 +36,8 @@ WORKDIR /home/steampipe
 RUN steampipe --version && steampipe plugin install aws
 RUN steampipe service start && steampipe service stop
 
+RUN rm -rf "$STEAMPIPE_INSTALL_DIR"/db/*/data
+
 # =================================================================
 # Stage 2: Runtime Image
 # =================================================================
