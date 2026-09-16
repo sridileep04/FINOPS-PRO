@@ -24,6 +24,16 @@ FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 # our own useradd/chown dance just to drop root, and avoids the common
 # footgun of a "non-root" nginx image that still binds to port 80 (which
 # requires CAP_NET_BIND_SERVICE and quietly re-adds a privilege).
+#
+# apk upgrade -- same reasoning as the `apt-get upgrade` added to
+# backend/Dockerfile and steampipe/Dockerfile: libssl3, libxml2, musl,
+# zlib, nghttp2-libs, libpng etc. are already part of this Alpine base
+# layer (nginx's own runtime deps), not something a `RUN apk add` here
+# would touch, so a CVE patched upstream ships anyway until Docker Hub
+# rebuilds this exact tag. Upgrading here closes that gap on every build
+# regardless of that rebuild cadence.
+RUN apk upgrade --no-cache
+
 COPY --from=builder /build/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
