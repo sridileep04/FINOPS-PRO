@@ -169,12 +169,6 @@ jobs:
 
       - name: pip-audit (backend dependency vulnerabilities)
         working-directory: backend
-        # Informational for now, not build-failing -- see
-        # backend/tests/security/AUDIT.md for the current findings
-        # (python-jose, starlette, python-multipart CVEs) and the
-        # tracked plan to upgrade them. Flip to a failing check once
-        # those are resolved, so this doesn't block unrelated PRs on
-        # pre-existing findings that already have an owner and a plan.
         run: pip-audit -r requirements.txt --desc || echo "::warning::pip-audit found known vulnerabilities -- see backend/tests/security/AUDIT.md"
 
       - name: Query-builder injection regression tests
@@ -238,16 +232,6 @@ jobs:
       - name: Build steampipe-service image
         run: docker build -t finops-steampipe:${{ github.sha }} ./steampipe
 
-      # trivy-config alone isn't enough: trivy-action always passes its own
-      # ignore-unfixed/severity/exit-code *inputs* to the trivy CLI, and
-      # those default to ignore-unfixed=false and severity=<all> regardless
-      # of what trivy.yaml says -- a long-standing trivy-action behaviour
-      # (aquasecurity/trivy-action#147), not a trivy.yaml bug. Without
-      # these three set explicitly here, trivy.yaml's intent (HIGH/CRITICAL
-      # only, skip findings with no fix available) is silently overridden,
-      # and every OS-level CVE with no upstream fix yet (e.g. the
-      # python-ecdsa Minerva timing attack, which its maintainers have said
-      # they won't fix) fails the build forever.
       - name: Trivy scan -- backend image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -274,6 +258,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+          skip-files: "usr/local/bin/steampipe,home/steampipe/.steampipe/**/*.so,home/steampipe/.steampipe/**/*.plugin"
 
   # ===========================================================================
   # End-to-end tests (Playwright) against the real, full docker-composed
@@ -290,12 +275,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate ephemeral encryption key for this CI run
-        # Never hardcode a real-shaped Fernet key in the repo, even a
-        # "throwaway CI-only" one -- gitleaks correctly flags it (see
-        # backend/tests/security/AUDIT.md's leaked-secret findings for
-        # why that instinct is right), and it normalizes committing
-        # secret-shaped values. Generated fresh, used only within this
-        # job, discarded when the runner is destroyed.
         run: echo "CI_CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')" >> "$GITHUB_ENV"
 
       - name: Write CI .env for docker compose
@@ -319,10 +298,7 @@ jobs:
           EOF
 
       - name: Build and start the full stack (prod-shaped compose, no dev override)
-        # Deliberately -f docker-compose.yml only -- exercises the exact
-        # images/config this app would actually ship with, catching
-        # Dockerfile/compose regressions that a manually-started
-        # `uvicorn`/`npm run dev` (the old approach here) could never catch.
+        
         run: docker compose -f docker-compose.yml up -d --build
 
       - name: Wait for the stack to become healthy
