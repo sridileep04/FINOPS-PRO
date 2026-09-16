@@ -32,7 +32,16 @@ FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 # would touch, so a CVE patched upstream ships anyway until Docker Hub
 # rebuilds this exact tag. Upgrading here closes that gap on every build
 # regardless of that rebuild cadence.
+#
+# USER root / USER 101: the base image already switches to its
+# unprivileged UID (101) as its own last step, so apk (which needs to
+# write /lib/apk/db) can't run as that user -- "Unable to lock database:
+# Permission denied". Switch to root only for this one instruction, then
+# straight back to 101 so the image that actually ships is still
+# non-root, matching what nginx-unprivileged is for in the first place.
+USER root
 RUN apk upgrade --no-cache
+USER 101
 
 COPY --from=builder /build/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
