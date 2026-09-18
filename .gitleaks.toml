@@ -32,18 +32,37 @@ regexes = [
   '''af_live_948a37fbc28d3e8e7a02db6ef93d8e58''',
 ]
 
-# Deliberately NOT allowlisting `backend/.env.example` or
-# `steampipe/.env.example` by path: backend/.env.example correctly uses
-# non-secret-looking placeholders ("change-me-service-token") that
-# don't trip gitleaks anyway, but steampipe/.env.example does NOT
-# follow that convention -- it contains a real 64-char hex value in the
-# exact shape `openssl rand -hex 32` produces, same issue as the
-# test.md finding below. A blanket path-allowlist for "*.env.example"
-# would have hidden that. See backend/tests/security/AUDIT.md.
+# Still deliberately NOT allowlisting `backend/.env.example` or
+# `steampipe/.env.example` by path: a blanket path-allowlist for
+# "*.env.example" would hide a genuinely leaked value committed to one
+# of them (which is exactly what happened with
+# steampipe/.env.example's 64-char hex token). Keep those paths scanned.
 #
-# NOT allowlisted, and deliberately left findable: the STEAMPIPE_SERVICE_TOKEN
-# values in backend/test.md, steampipe/app/test.md, AND
-# steampipe/.env.example (three separate real-looking secrets, not one).
-# See backend/tests/security/AUDIT.md for the recommended fix (replace
-# with placeholders + rotate if any were used against a real
-# steampipe-service instance).
+# --- Historical findings (working tree is now clean) ----------------
+# The STEAMPIPE_SERVICE_TOKEN values in backend/test.md,
+# steampipe/app/test.md and steampipe/.env.example, and the
+# Fernet-shaped CREDENTIAL_ENCRYPTION_KEY literal in
+# backend/tests/conftest.py, have all been replaced in the working tree
+# (placeholders, and a per-session generated key respectively). They
+# remain in git history, and gitleaks scans full history when this
+# workflow is triggered manually or on the nightly schedule
+# (fetch-depth: 0, ~38 commits) rather than just the pushed range --
+# which is why these surfaced on a workflow_dispatch run after a series
+# of green push runs, with no code change in between.
+#
+# History cannot be un-leaked without a filter-repo rewrite and a force
+# push that breaks every existing clone, so those already-published
+# occurrences are suppressed by *fingerprint*, in the `.gitleaksignore`
+# file at the repo root -- NOT here. This allowlist table only supports
+# commits/paths/regexes/stopwords; fingerprints are a .gitleaksignore
+# feature. Fingerprint is deliberately the narrowest available form: it
+# pins commit + file + rule + line, so it exempts only those exact
+# historical findings. Re-introducing the same token in a new commit
+# yields a different fingerprint and still fails the build, which a
+# path or regex allowlist would not do.
+#
+# IMPORTANT: allowlisting suppresses the *alert*, not the exposure.
+# These values were public in a GitHub repo, so treat them as
+# compromised and rotate STEAMPIPE_SERVICE_TOKEN on any
+# steampipe-service instance where either value was ever used. See
+# backend/tests/security/AUDIT.md.

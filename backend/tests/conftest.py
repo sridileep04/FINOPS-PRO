@@ -12,6 +12,7 @@ DB_PORT/DATABASE_URL afterwards with the real testcontainers Postgres
 connection info -- see that file for how the app's DB engine is
 rebuilt against the container instead of these placeholder values.
 """
+import base64
 import os
 from pathlib import Path
 
@@ -30,5 +31,9 @@ os.environ.setdefault("DB_NAME", "test")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
 os.environ.setdefault("STEAMPIPE_SERVICE_TOKEN", "test-steampipe-token")
 os.environ.setdefault("ENCRYPTION_BACKEND", "fernet")
-os.environ.setdefault("CREDENTIAL_ENCRYPTION_KEY", "2GgDKzdgBGAf1ImFVdMDixC9OjmZt9JwqL9fxjbggZ0=")
+# Generated per test session rather than hardcoded. A literal
+os.environ.setdefault(
+    "CREDENTIAL_ENCRYPTION_KEY",
+    base64.urlsafe_b64encode(os.urandom(32)).decode(),
+)
 os.environ.setdefault("SEED_DEMO_USERS", "false")

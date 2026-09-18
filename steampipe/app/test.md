@@ -1,4 +1,3 @@
-
 # Summary
 
 - The platform uses a single IAM Role (`PlatformFinOpsRole`) attached to its EC2 instance.
@@ -643,7 +642,7 @@ docker run -d \
   --name steampipe-service \
   --restart unless-stopped \
   -p 8001:8001 \
-  -e STEAMPIPE_SERVICE_TOKEN='e739b1599f1f5589b3c745b41f34f218db94451f9e462e273515b90c374a0404' \
+  -e STEAMPIPE_SERVICE_TOKEN='change-me-generate-with-openssl-rand-hex-32' \
   -e STEAMPIPE_INSTALL_DIR='/home/steampipe/.steampipe' \
   -e STEAMPIPE_WORKSPACES_DIR='/home/steampipe/workspaces' \
   -e PLATFORM_CREDENTIAL_SOURCE='Ec2InstanceMetadata' \

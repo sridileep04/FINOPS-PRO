@@ -1,0 +1,35 @@
+# Fingerprints of secrets that exist in this repo's *git history* only.
+# The working tree is clean: every value below has been replaced with a
+# placeholder (or, for the test key, generated per session) -- see the
+# "Historical findings" note in .gitleaks.toml for the full rationale.
+#
+# Why this file is needed at all: the Security job checks out with
+# fetch-depth: 0, and gitleaks scans the entire history (~38 commits)
+# on a manual (workflow_dispatch) or scheduled run rather than only the
+# pushed commit range. That's why these surfaced on a manually
+# triggered run after a series of green push runs, with no code change
+# in between -- different scan scope, not a new leak.
+#
+# Fingerprint format is <commit>:<file>:<rule-id>:<line>, copied
+# verbatim from the gitleaks report. It pins one specific finding, so
+# re-introducing any of these values in a new commit produces a
+# different fingerprint and still fails the build.
+#
+# !! These values were publicly readable on GitHub. Suppressing the
+# !! alert does not undo the exposure: rotate STEAMPIPE_SERVICE_TOKEN
+# !! on any steampipe-service instance where either token was used.
+
+# STEAMPIPE_SERVICE_TOKEN in a `docker run` example (backend/test.md)
+cb6980cc9a21bf4cab7d974795cab4ee6b2f9523:backend/test.md:generic-api-key:4
+b47a0a8716b36861a4bbfeb49dbcae69f94075d7:backend/test.md:generic-api-key:4
+
+# STEAMPIPE_SERVICE_TOKEN committed as a real 64-char hex value instead
+# of a placeholder (steampipe/.env.example)
+97cb5d9cd9a29091b9a96a813bd23f92944c3340:steampipe/.env.example:generic-api-key:7
+
+# Same token as backend/test.md, duplicated in steampipe/app/test.md
+4ae0f929f9a68c92d58a74e1139a2d977d9d2745:steampipe/app/test.md:generic-api-key:646
+
+# Test-only Fernet-shaped CREDENTIAL_ENCRYPTION_KEY literal; now
+# generated per test session in backend/tests/conftest.py
+f22dc6ab06635a7808d0d5409ac4209579bd9f6b:backend/tests/conftest.py:generic-api-key:33
