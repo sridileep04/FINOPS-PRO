@@ -32,11 +32,18 @@ networks:
   app-plane:
     # backend <-> frontend <-> internet (for outbound calls: Groq/OpenAI,
     # customer AWS accounts via assumed roles)
+  observability:
+    #internal: true
 
 volumes:
   postgres_data:
   redis_data:
   steampipe_data:
+  prometheus_data:
+  grafana_data:
+  tempo_data:
+  loki_data:
+  alertmanager_data:
 
 x-hardening: &hardening
   security_opt:
@@ -212,6 +219,8 @@ services:
         condition: service_healthy
       steampipe-service:
         condition: service_healthy
+    healthcheck:
+      disable: true
 
   celery-beat:
     build:
@@ -240,6 +249,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      disable: true
 
   frontend:
     build:
@@ -264,3 +275,81 @@ services:
     # infrastructure-agnostic on purpose and doesn't assume a certificate
     # source. The Strict-Transport-Security header in nginx.conf is a
     # no-op until that's in place.
+  
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    <<: *hardening
+    environment:
+      DATA_SOURCE_URI: "postgres:5432/${DB_NAME}?sslmode=disable"
+      DATA_SOURCE_USER: ${DB_USER}
+      DATA_SOURCE_PASS: ${DB_PASSWORD}
+    networks: [data-plane, observability]
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    <<: *hardening
+    environment:
+      REDIS_ADDR: "redis:6379"
+    networks: [data-plane, observability]
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    <<: *hardening
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks: [data-plane, observability]  # data-plane read access to postgres/redis exporters; observability to scrape backend/celery which sit on app-plane+data-plane already
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    <<: *hardening
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks: [observability]
+    ports:
+      - "127.0.0.1:3001:3000"  # bind to loopback only; put behind your VPN/SSO, don't expose publicly
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.112.0
+    <<: *hardening
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    networks: [observability]
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    <<: *hardening
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    networks: [observability]
+
+  loki:
+    image: grafana/loki:3.2.1
+    <<: *hardening
+    volumes:
+      - ./observability/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    networks: [observability]
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    <<: *hardening
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./observability/promtail-config.yaml:/etc/promtail/config.yaml:ro
+    networks: [observability]
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    <<: *hardening
+    volumes:
+      - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command: ['--config.file=/etc/alertmanager/alertmanager.yml', '--storage.path=/alertmanager']
+    networks: [observability]

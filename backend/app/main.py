@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.logging_config import configure_logging
 from app.core.request_context import request_id_var
 from app.db.session import AsyncSessionLocal
+from prometheus_fastapi_instrumentator import Instrumentator
 
 configure_logging()
 logger = logging.getLogger("finops")
@@ -95,6 +96,13 @@ class RequestIDMiddleware:
 
 
 app.add_middleware(RequestIDMiddleware)
+
+Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=True,
+    excluded_handlers=["/health", "/health/ready", "/metrics"],
+).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+
 app.include_router(api_router)
 
 

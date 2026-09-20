@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 10s
+scrape_configs:
+  - job_name: backend
+    static_configs: [{ targets: ["backend:8000"] }]
+  - job_name: steampipe-service
+    static_configs: [{ targets: ["steampipe-service:8001"] }]
+  - job_name: celery-worker
+    static_configs: [{ targets: ["celery-worker:9808"] }]
+  - job_name: postgres
+    static_configs: [{ targets: ["postgres-exporter:9187"] }]
+  - job_name: redis
+    static_configs: [{ targets: ["redis-exporter:9121"] }]
+    
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']

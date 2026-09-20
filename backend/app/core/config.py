@@ -63,6 +63,10 @@ class Settings(BaseSettings):
   PLATFORM_AWS_SECRET_ACCESS_KEY: str | None = None
   PLATFORM_CREDENTIAL_SOURCE: str = "Ec2InstanceMetadata"
 
+  #Tracing
+  OTEL_ENABLED: bool = False
+  OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://otel-collector:4317"
+
   # Single Pydantic V2 configuration definition
   model_config = SettingsConfigDict(
       env_file=".env", case_sensitive=True, extra="ignore"

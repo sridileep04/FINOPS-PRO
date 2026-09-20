@@ -74,6 +74,8 @@ class JsonFormatter(logging.Formatter):
             "request_id": getattr(record, "request_id", "-"),
             "message": record.getMessage(),
         }
+        payload["trace_id"] = getattr(record, "otelTraceID", None)
+        payload["span_id"] = getattr(record, "otelSpanID", None)
         if record.exc_info:
             payload["exception"] = "".join(traceback.format_exception(*record.exc_info))
         return json.dumps(payload)

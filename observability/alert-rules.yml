@@ -1,0 +1,23 @@
+groups:
+  - name: finops-slo
+    rules:
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: { severity: page }
+      - alert: SlowRequests
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 10m
+      - alert: SteampipeServiceSaturated
+        expr: steampipe_concurrent_queries >= 8
+        for: 2m
+      - alert: CeleryQueueBacklog
+        expr: redis_llen{key="celery"} > 500  # from redis-exporter; add --check-keys celery to its command
+        for: 10m
+      - alert: CeleryTaskFailureSpike
+        expr: rate(celery_task_failures_total[15m]) > 0
+        for: 5m
+      - alert: ReadinessFailing
+        expr: probe_success{job="backend-readiness"} == 0   # pair with blackbox_exporter hitting /health/ready
+        for: 2m
+        labels: { severity: page }

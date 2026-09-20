@@ -3,6 +3,10 @@ from celery.schedules import crontab
 
 from app.core.config import settings
 
+import time
+from celery.signals import task_prerun, task_postrun, task_failure
+from prometheus_client import Counter, Histogram
+
 celery_app = Celery(
     "finops",
     broker=settings.CELERY_BROKER_URL,
@@ -35,3 +39,21 @@ celery_app.conf.update(
         },
     },
 )
+
+celery_task_duration_seconds = Histogram("celery_task_duration_seconds", "Task duration", ["task_name"])
+celery_task_failures_total = Counter("celery_task_failures_total", "Task failures", ["task_name"])
+_task_start_times: dict[str, float] = {}
+
+@task_prerun.connect
+def _on_prerun(task_id, task, **kwargs):
+    _task_start_times[task_id] = time.monotonic()
+
+@task_postrun.connect
+def _on_postrun(task_id, task, **kwargs):
+    start = _task_start_times.pop(task_id, None)
+    if start:
+        celery_task_duration_seconds.labels(task_name=task.name).observe(time.monotonic() - start)
+
+@task_failure.connect
+def _on_failure(sender, **kwargs):
+    celery_task_failures_total.labels(task_name=sender.name).inc()

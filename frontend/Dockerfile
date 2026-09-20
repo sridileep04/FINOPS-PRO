@@ -49,7 +49,7 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 8080
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- http://localhost:8080/ >/dev/null 2>&1 || exit 1
+    CMD wget -qO- http://localhost:3000/ >/dev/null 2>&1 || exit 1
 
 # Base image's default USER (non-root, uid 101) and CMD (nginx -g "daemon off;")
 # are both already correct for this use case -- no override needed.
