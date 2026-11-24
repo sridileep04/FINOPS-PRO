@@ -6,9 +6,14 @@
 set -eu
 
 case "${1:-uvicorn-server}" in
+
   uvicorn-server)
+  if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     echo "Running database migrations (alembic upgrade head)..."
     alembic upgrade head
+  else
+    echo "RUN_MIGRATIONS=false -> skipping migrations (a separate Job owns them)."
+  fi
 
     workers="${API_WORKERS:-2}"
     echo "Starting uvicorn with ${workers} worker(s)..."

@@ -41,7 +41,8 @@ class Settings(BaseSettings):
 
   # Steampipe microservice
   # STEAMPIPE_SERVICE_URL: str = "http://steampipe-service:8001"
-  STEAMPIPE_SERVICE_URL: str = "http://localhost:8001"
+  # STEAMPIPE_SERVICE_URL: str = "http://localhost:8001"
+  STEAMPIPE_SERVICE_URL: str
   STEAMPIPE_SERVICE_TOKEN: str
   STEAMPIPE_CLIENT_TIMEOUT_SECONDS: int = 330
   MAX_CUSTOM_QUERY_LENGTH: int = 20_000

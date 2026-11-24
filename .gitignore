@@ -112,3 +112,14 @@ mongo-data/
 .DS_Store?
 ehthumbs.db
 Thumbs.db
+
+aws/
+
+# Terraform (commit .terraform.lock.hcl; it pins provider versions)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+infra/terraform/envs/dev/backend.hcl
+crash.log
