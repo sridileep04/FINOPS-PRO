@@ -1,0 +1,7 @@
+clusterName: finops-dev
+region: ap-south-1
+vpcId: REPLACE_WITH_TERRAFORM_OUTPUT
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller   # must match the Pod Identity association
+replicaCount: 2

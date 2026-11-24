@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: finops
+  namespace: argocd
+spec:
+  description: FinOps Pro platform and the operators it depends on
+  sourceRepos:
+    - https://github.com/sridileep04/FINOPS-PRO.git
+    - https://aws.github.io/eks-charts
+    - https://charts.external-secrets.io
+    - https://kedacore.github.io/charts
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  orphanedResources:
+    warn: true

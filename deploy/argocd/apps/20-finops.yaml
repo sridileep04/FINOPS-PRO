@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: finops
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: finops
+  source:
+    repoURL: https://github.com/sridileep04/FINOPS-PRO.git
+    targetRevision: main
+    path: deploy/helm/finops
+    helm:
+      releaseName: finops
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+        - values-env.generated.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: finops
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 3m }
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]
