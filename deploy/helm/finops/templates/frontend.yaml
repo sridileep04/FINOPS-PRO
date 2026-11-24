@@ -1,0 +1,71 @@
+{{- $sel := dict "root" . "component" "frontend" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  selector:
+    matchLabels:
+      {{- include "finops.selector" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "finops.labels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.frontend.runAsUser }}
+        seccompProfile:
+          type: {{ .Values.securityContext.seccompProfile }}
+      {{- include "finops.spread" $sel | nindent 6 }}
+      containers:
+        - name: frontend
+          image: {{ include "finops.image" (dict "root" . "image" .Values.frontend.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000   # frontend/nginx.conf: `listen 3000;`
+          securityContext:
+            {{- include "finops.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "finops.selector" $sel | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- if .Values.frontend.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.frontend.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "finops.selector" $sel | nindent 6 }}
+{{- end }}

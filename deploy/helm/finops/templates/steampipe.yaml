@@ -1,0 +1,78 @@
+{{- $sel := dict "root" . "component" "steampipe" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: steampipe-service
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: steampipe
+spec:
+  replicas: {{ .Values.steampipe.replicas }}
+  selector:
+    matchLabels:
+      {{- include "finops.selector" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "finops.labels" . | nindent 8 }}
+        app.kubernetes.io/component: steampipe
+    spec:
+      serviceAccountName: finops-steampipe
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.steampipe.runAsUser }}
+        seccompProfile:
+          type: {{ .Values.securityContext.seccompProfile }}
+      containers:
+        - name: steampipe
+          image: {{ include "finops.image" (dict "root" . "image" .Values.steampipe.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8001
+          env:
+            - name: STEAMPIPE_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.secretName }}
+                  key: STEAMPIPE_SERVICE_TOKEN
+            - name: STEAMPIPE_INSTALL_DIR
+              value: /home/steampipe/.steampipe
+            - name: STEAMPIPE_WORKSPACES_DIR
+              value: /home/steampipe/workspaces
+            - name: PLATFORM_CREDENTIAL_SOURCE
+              value: {{ .Values.config.platformCredentialSource | quote }}
+            - name: STEAMPIPE_QUERY_TIMEOUT_SECONDS
+              value: {{ .Values.steampipe.queryTimeoutSeconds | quote }}
+            - name: STEAMPIPE_MAX_CONCURRENT_QUERIES
+              value: {{ .Values.steampipe.maxConcurrentQueries | quote }}
+          securityContext:
+            {{- include "finops.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.steampipe.resources | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: steampipe-service
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "finops.selector" $sel | nindent 4 }}
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http

@@ -1,0 +1,68 @@
+{{- $sel := dict "root" . "component" "worker" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  {{- if not .Values.worker.keda.enabled }}
+  replicas: {{ .Values.worker.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "finops.selector" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "finops.labels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: finops-backend
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.backend.runAsUser }}
+        seccompProfile:
+          type: {{ .Values.securityContext.seccompProfile }}
+      containers:
+        - name: worker
+          image: {{ include "finops.image" (dict "root" . "image" .Values.backend.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: ["celery-worker"]
+          envFrom:
+            - configMapRef:
+                name: finops-config
+            - secretRef:
+                name: {{ .Values.global.secretName }}
+          env:
+            - name: WORKER_CONCURRENCY
+              value: {{ .Values.worker.concurrency | quote }}
+          securityContext:
+            {{- include "finops.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+      terminationGracePeriodSeconds: 120
+{{- if .Values.worker.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: celery-worker
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: celery-worker
+  minReplicaCount: {{ .Values.worker.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.worker.keda.maxReplicaCount }}
+  triggers:
+    - type: redis
+      metadata:
+        address: redis.{{ .Release.Namespace }}.svc.cluster.local:6379
+        listName: {{ .Values.worker.keda.queueName | quote }}
+        listLength: {{ .Values.worker.keda.listLength | quote }}
+        databaseIndex: {{ .Values.worker.keda.brokerDatabaseIndex | quote }}
+{{- end }}

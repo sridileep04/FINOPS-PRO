@@ -1,0 +1,43 @@
+{{- $sel := dict "root" . "component" "beat" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beat
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "finops.selector" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "finops.labels" . | nindent 8 }}
+        app.kubernetes.io/component: beat
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: finops-backend
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.backend.runAsUser }}
+        seccompProfile:
+          type: {{ .Values.securityContext.seccompProfile }}
+      containers:
+        - name: beat
+          image: {{ include "finops.image" (dict "root" . "image" .Values.backend.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: ["celery", "-A", "app.tasks.celery_app:celery_app", "beat", "--schedule=/tmp/celerybeat-schedule"]
+          envFrom:
+            - configMapRef:
+                name: finops-config
+            - secretRef:
+                name: {{ .Values.global.secretName }}
+          securityContext:
+            {{- include "finops.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.beat.resources | nindent 12 }}

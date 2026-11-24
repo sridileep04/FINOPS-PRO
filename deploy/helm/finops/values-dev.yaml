@@ -1,0 +1,8 @@
+global:
+  imageTag: "unset"
+
+config:
+  seedDemoUsers: "false"   # "true" creates admin@ghostfinops.com / viewer@ghostfinops.com (password123)
+
+backend:
+  replicas: 2

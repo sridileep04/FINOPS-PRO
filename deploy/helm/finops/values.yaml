@@ -1,0 +1,108 @@
+global:
+  imageRegistry: ""
+  imageTag: "unset"
+  imagePullPolicy: IfNotPresent
+  secretName: finops-secrets
+
+config:
+  environment: production
+  logLevel: INFO
+  corsOrigins: "*"
+  seedDemoUsers: "false"
+  encryptionBackend: fernet
+  platformCredentialSource: EcsContainer
+  extra: {}
+
+securityContext:
+  seccompProfile: RuntimeDefault
+
+backend:
+  image:
+    repository: finops/backend
+    tag: ""            # empty = use global.imageTag
+  replicas: 2          # ignored when autoscaling.enabled
+  apiWorkers: 1        # uvicorn workers PER POD. Scale with pods (HPA) instead of workers.
+  runAsUser: 10001     # numeric UID of `appuser` in backend/Dockerfile
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits:   { memory: 1536Mi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+worker:
+  replicas: 1          # used only when keda.enabled is false
+  concurrency: 4
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits:   { memory: 1536Mi }
+  keda:
+    enabled: true
+    minReplicaCount: 1
+    maxReplicaCount: 4
+    queueName: celery          # Celery's default queue name
+    listLength: "5"            # target pending tasks per replica
+    brokerDatabaseIndex: "1"   # matches CELERY_BROKER_URL=redis://redis:6379/1
+
+beat:
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits:   { memory: 384Mi }
+
+steampipe:
+  image:
+    repository: finops/steampipe
+    tag: ""
+  replicas: 1
+  runAsUser: 10001
+  queryTimeoutSeconds: 300
+  maxConcurrentQueries: 3
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { memory: 2560Mi }
+
+frontend:
+  image:
+    repository: finops/frontend
+    tag: ""
+  replicas: 2
+  runAsUser: 101       # nginx-unprivileged
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { memory: 128Mi }
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+redis:
+  image:
+    repository: redis
+    tag: 7-alpine
+  runAsUser: 999
+  runAsGroup: 1000
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { memory: 320Mi }
+  maxmemory: 256mb
+
+ingress:
+  enabled: true
+  className: alb       # created by the AWS Load Balancer Controller
+  host: ""             # empty = respond on the ALB's own DNS name
+  certificateArn: ""
+  annotations: {}
+
+networkPolicy:
+  enabled: true
+  albSourceCidr: 10.20.0.0/16
+
+migration:
+  enabled: true        # alembic upgrade head, once per release, as a pre-sync Job
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { memory: 512Mi }

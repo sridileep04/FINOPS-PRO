@@ -1,0 +1,115 @@
+{{- $sel := dict "root" . "component" "backend" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  {{- if not .Values.backend.autoscaling.enabled }}
+  replicas: {{ .Values.backend.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "finops.selector" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "finops.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: finops-backend
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.backend.runAsUser }}
+        seccompProfile:
+          type: {{ .Values.securityContext.seccompProfile }}
+      {{- include "finops.spread" $sel | nindent 6 }}
+      containers:
+        - name: backend
+          image: {{ include "finops.image" (dict "root" . "image" .Values.backend.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: ["uvicorn-server"]
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: finops-config
+            - secretRef:
+                name: {{ .Values.global.secretName }}
+          env:
+            - name: API_WORKERS
+              value: {{ .Values.backend.apiWorkers | quote }}
+            - name: RUN_MIGRATIONS
+              value: "false"
+          securityContext:
+            {{- include "finops.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "finops.selector" $sel | nindent 4 }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+{{- if .Values.backend.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: {{ .Values.backend.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.backend.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.backend.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- if .Values.backend.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.backend.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "finops.selector" $sel | nindent 6 }}
+{{- end }}

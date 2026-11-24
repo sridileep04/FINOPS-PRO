@@ -1,0 +1,6 @@
+apiVersion: v2
+name: finops
+description: FinOps Pro platform (frontend, API, Celery worker/beat, steampipe-service, Redis)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

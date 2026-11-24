@@ -1,0 +1,4 @@
+global:
+  imageRegistry: ""
+networkPolicy:
+  albSourceCidr: 10.20.0.0/16

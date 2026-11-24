@@ -1,0 +1,23 @@
+# Helm
+```
+curl -fsSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+sudo mv kubeconform /usr/local/bin/       # macOS: brew install kubeconform
+
+cd deploy/helm/finops
+helm lint . -f values-dev.yaml
+helm template finops . -n finops -f values-dev.yaml \
+  --set global.imageRegistry=123456789012.dkr.ecr.ap-south-1.amazonaws.com \
+  --set global.imageTag=sha-abc1234 > /tmp/rendered.yaml
+grep -c '^kind:' /tmp/rendered.yaml
+kubeconform -strict -summary -kubernetes-version 1.35.0 -schema-location default \
+  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' /tmp/rendered.yaml
+cd ../../..
+```
+
+```
+cd deploy/helm/finops
+helm template finops . --set global.imageRegistry=123456789012.dkr.ecr.ap-south-1.amazonaws.com --set global.imageTag=sha-abc1234 | grep "image:"
+helm template finops . --set backend.autoscaling.enabled=false --set backend.replicas=5 | grep -E "kind: HorizontalPodAutoscaler|replicas:"
+helm template finops . --set networkPolicy.enabled=false | grep -c NetworkPolicy
+cd ../../..
+```

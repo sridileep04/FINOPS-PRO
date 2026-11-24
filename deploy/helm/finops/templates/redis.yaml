@@ -1,0 +1,69 @@
+{{- $sel := dict "root" . "component" "redis" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "finops.selector" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "finops.labels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.redis.runAsUser }}
+        runAsGroup: {{ .Values.redis.runAsGroup }}
+        fsGroup: {{ .Values.redis.runAsGroup }}
+        seccompProfile:
+          type: {{ .Values.securityContext.seccompProfile }}
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["redis-server", "--maxmemory", {{ .Values.redis.maxmemory | quote }}, "--maxmemory-policy", "allkeys-lru", "--save", ""]
+          ports:
+            - name: redis
+              containerPort: 6379
+          securityContext:
+            {{- include "finops.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels:
+    {{- include "finops.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "finops.selector" $sel | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
